@@ -1,0 +1,14 @@
+.env
+.env.*
+
+.git
+.gitignore
+
+*.log
+tmp/
+bin/
+dist/
+docs/
+.agents/
+
+compose.yaml

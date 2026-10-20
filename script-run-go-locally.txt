@@ -1,0 +1,9 @@
+$env:PORT = ':8080'
+$env:MAIN_DBSERVER = 'ganti-dengan-host-sql-engine'
+$env:MAIN_DBPORT = 'ganti-dengan-port-sql-engine'
+$env:MAIN_DBUSER = 'ganti-dengan-user-sql-engine'
+$env:MAIN_DBPASSWORD = 'ganti-dengan-pass-sql-engine'
+$env:MAIN_DBNAME = 'ganti-dengan-nama-db'
+$env:JWTKEY = 'ganti-dengan-secret-jwt'
+$env:SIGNSECRET = 'ganti-dengan-secret-signature'
+go run .

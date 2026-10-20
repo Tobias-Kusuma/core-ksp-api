@@ -1,0 +1,50 @@
+services:
+
+  api:
+    image: core-ksp-api:1.0
+    stop_grace_period: 35s
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    ports:
+      - "5017:8080"
+
+    # # kalau sudah multi instance dengan satu compose.yaml, bisa gunakan:
+    # expose:
+    #   - "8080"
+
+    env_file:
+      - .env
+
+    environment:
+      INSTANCE_NAME: api-1
+
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+
+    ports:
+      - "6379:6379"
+
+  # minio:
+  #   image: minio/minio
+  #   command: server /data --console-address ":9001"
+
+  #   ports:
+  #     - "9000:9000" # obj storage yang bisa diakses golang
+  #     - "9001:9001" # console untuk akses manual
+
+  #   environment:
+  #     MINIO_ROOT_USER: admin
+  #     MINIO_ROOT_PASSWORD: admin.123
+
+  #   volumes:
+  #     - "D:/DockerData/MinIO:/data"
+
+  # mc:
+  #   image: minio/mc
+  #   entrypoint: /bin/sh
