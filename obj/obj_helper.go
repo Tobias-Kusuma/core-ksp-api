@@ -27,11 +27,11 @@ type LogHis struct {
 // Doc: db instance untuk document operation;
 // Log: db instance untuk log operation;
 type AppTx struct {
-	C      *gin.Context    // session context
-	Ctx    context.Context // generic context
-	Mobile *gorm.DB        // transaksi data mobile
-	Doc    *gorm.DB        // transaksi data file
-	Log    *gorm.DB        // transaksi log trail
+	C    *gin.Context    // session context
+	Ctx  context.Context // generic context
+	Main *gorm.DB        // transaksi data main
+	Doc  *gorm.DB        // transaksi data file
+	Log  *gorm.DB        // transaksi log trail
 }
 
 // struct claim untuk otentikasi jwt

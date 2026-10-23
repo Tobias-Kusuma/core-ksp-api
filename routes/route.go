@@ -3,6 +3,7 @@ package routes
 import (
 	"fmt"
 
+	"github.com/Tobias-Kusuma/core-ksp-api/controller"
 	db "github.com/Tobias-Kusuma/core-ksp-api/database"
 	"github.com/Tobias-Kusuma/core-ksp-api/helper"
 	"github.com/gin-gonic/gin"
@@ -33,5 +34,14 @@ func DefaultRoutes(routerEngine *gin.Engine) {
 				helper.RespondMaskedOk(c, "Berhasil terhubung dengan database", nil)
 			}
 		})
+	}
+}
+
+func AnggotaRoute(routerEngine *gin.Engine) {
+	// terbuka untuk publik tanpa authentication dan authorization
+	anggotaGroup := routerEngine.Group("/anggota")
+	{
+		// pendaftaran anggota
+		anggotaGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
 	}
 }

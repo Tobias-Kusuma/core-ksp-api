@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"net/http"
+	"net/mail"
 	"net/url"
 
 	db "github.com/Tobias-Kusuma/core-ksp-api/database"
@@ -129,20 +130,20 @@ func Get_DB_ReqBody(c *gin.Context, timeout int, ReqBody any) (*obj.AppTx, error
 	c.Set("cancelCtx", cancel)
 
 	// prepare db (nanti akan pakai ctx yang sama)
-	mobileDb := db.Main()
+	mainDb := db.Main()
 	// docDb := db.Doc()
 	// logDb := db.Log()
 
 	// buat guard kalau koneksi ada yang rusak
-	if mobileDb == nil /*|| docDb == nil || logDb == nil*/ {
+	if mainDb == nil /*|| docDb == nil || logDb == nil*/ {
 		cancel()
 		return nil, fmt.Errorf("db pools not initialized (call db.InitDB() first). Func called from %s", caller)
 	}
 
 	return &obj.AppTx{
-		C:      c,
-		Ctx:    ctx,
-		Mobile: mobileDb.WithContext(ctx),
+		C:    c,
+		Ctx:  ctx,
+		Main: mainDb.WithContext(ctx),
 		// Doc:    docDb.WithContext(ctx),
 		// Log:    logDb.WithContext(ctx),
 	}, nil
@@ -974,4 +975,27 @@ func FilterGenOptionsLike(data obj.ResListGenOptions, keyword string) obj.ResLis
 	}
 
 	return result
+}
+
+func IsValidEmail(email string) bool {
+	// Hilangkan spasi di awal dan akhir
+	email = strings.TrimSpace(email)
+
+	// Email tidak boleh kosong
+	if email == "" {
+		return false
+	}
+
+	// Parsing alamat email
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
+		return false
+	}
+
+	// Pastikan hanya berisi alamat email, tanpa display name
+	if addr.Address != email {
+		return false
+	}
+
+	return true
 }
