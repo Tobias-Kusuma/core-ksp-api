@@ -160,7 +160,7 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 			OTR:       &UserInput,
 			DOTR:      &TglNow,
 		}
-		if err := AppTx.Main.Debug().Table("MSTCST").Create(&DataAnggota).Error; err != nil {
+		if err := trx.Debug().Table("MSTCST").Create(&DataAnggota).Error; err != nil {
 			trx.Rollback()
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
@@ -185,7 +185,7 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 			TGLAWAL:  &TglNow,
 			STATUS:   helper.StringPtr("1"),
 		}
-		if err := AppTx.Main.Debug().Table("SHDBLC").Create(&DataSimpPokok).Error; err != nil {
+		if err := trx.Debug().Table("SHDBLC").Create(&DataSimpPokok).Error; err != nil {
 			trx.Rollback()
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
@@ -210,7 +210,7 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 			TGLAWAL:  &TglNow,
 			STATUS:   helper.StringPtr("1"),
 		}
-		if err := AppTx.Main.Debug().Table("SHDBLC").Create(DataSimpWajib).Error; err != nil {
+		if err := trx.Debug().Table("SHDBLC").Create(DataSimpWajib).Error; err != nil {
 			trx.Rollback()
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
@@ -235,7 +235,7 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 			TGLAWAL:  &TglNow,
 			STATUS:   helper.StringPtr("1"),
 		}
-		if err := AppTx.Main.Debug().Table("SHDBLC").Create(DataSimpSuk).Error; err != nil {
+		if err := trx.Debug().Table("SHDBLC").Create(DataSimpSuk).Error; err != nil {
 			trx.Rollback()
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
@@ -243,5 +243,54 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 
 		trx.Commit()
 		helper.RespondMaskedOk(c, "Berhasil membuat anggota baru", nil)
+	}
+}
+
+func GetDaftarAnggota() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ReqBody obj.ReqDaftarAnggota
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		ResData := make([]obj.ResDaftarAnggota, 0)
+		if err := AppTx.Main.Debug().Table("MSTCST").Select("kdcab, cno, tipenas, jnsnas, cnm").Where("kdcab = ?", ReqBody.KDCAB).Scan(&ResData).Error; err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar anggota", ResData)
+	}
+}
+
+func GetDataAnggota() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ReqBody obj.ReqDataAnggota
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		var Anggota obj.MSTCST
+		if err := AppTx.Main.Debug().Table("MSTCST").Select("*").Where("kdcab = ? and cno = ?", ReqBody.KDCAB, ReqBody.CNO).Scan(&Anggota).Error; err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		DaftarRekening := make([]obj.SHDBLC, 0)
+		if err := AppTx.Main.Debug().Table("SHDBLC").Select("*").Where("cno = ?", ReqBody.CNO).Scan(&DaftarRekening).Error; err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		ResData := obj.ResDataAnggota{
+			ANGGOTA:         Anggota,
+			DAFTAR_REKENING: DaftarRekening,
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar anggota", ResData)
 	}
 }

@@ -57,3 +57,12 @@ type ReqAnggotaBaru struct {
 	SIMPANAN_WAJIB    ReqBukaSimpanan      `json:"simpanan_wajib"`
 	SIMPANAN_SUKARELA ReqBukaSimpanan      `json:"simpanan_sukarela"`
 }
+
+type ReqDaftarAnggota struct {
+	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
+}
+
+type ReqDataAnggota struct {
+	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
+	CNO   string `json:"cno" gorm:"column:cno"`
+}

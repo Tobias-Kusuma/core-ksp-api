@@ -7,3 +7,16 @@ type ResGenOption struct {
 }
 
 type ResListGenOptions []ResGenOption
+
+type ResDaftarAnggota struct {
+	KDCAB   string `json:"kdcab" gorm:"column:kdcab"`
+	CNO     string `json:"cno" gorm:"column:cno"`
+	TIPENAS string `json:"tipenas" gorm:"column:tipenas"`
+	JNSNAS  string `json:"jnsnas" gorm:"column:jnsnas"`
+	CNM     string `json:"cnm" gorm:"column:cnm"`
+}
+
+type ResDataAnggota struct {
+	ANGGOTA         MSTCST   `json:"anggota"`
+	DAFTAR_REKENING []SHDBLC `json:"daftar_rekening"`
+}
