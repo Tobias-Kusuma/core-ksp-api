@@ -16,10 +16,16 @@ import (
 	"github.com/Tobias-Kusuma/core-ksp-api/routes"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	// load konfigurasi dari file .env jika ada
+	if err := godotenv.Load(); err != nil {
+		log.Println("Notice: File .env tidak ditemukan, menggunakan environment variables sistem")
+	}
 
 	// buka koneksi dengan database
 	if err := db.InitDB(); err != nil {
