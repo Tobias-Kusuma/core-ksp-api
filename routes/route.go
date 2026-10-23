@@ -43,5 +43,11 @@ func AnggotaRoute(routerEngine *gin.Engine) {
 	{
 		// pendaftaran anggota
 		anggotaGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
+
+		// get daftar anggota
+		anggotaGroup.POST("/getdaftaranggota", controller.GetDaftarAnggota())
+
+		// get data anggota
+		anggotaGroup.POST("/getdataanggota", controller.GetDataAnggota())
 	}
 }
