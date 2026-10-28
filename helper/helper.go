@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"path/filepath"
 	"reflect"
@@ -157,6 +158,16 @@ func Replace(input, from, to string) string {
 // untuk handling string pointer
 func StringPtr(s string) *string {
 	return &s
+}
+
+// untuk handling float64 pointer
+func Float64Ptr(f float64) *float64 {
+	return &f
+}
+
+// untuk handling int64 pointer
+func Int64Ptr(i int64) *int64 {
+	return &i
 }
 
 // untuk detect type data
@@ -999,3 +1010,306 @@ func IsValidEmail(email string) bool {
 
 	return true
 }
+
+func Round2(val float64) float64 {
+	return math.Round(val*100) / 100
+}
+
+func ParseDateFlexible(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Now(), nil
+	}
+	formats := []string{
+		DateFormat,
+		DateTimeFormat,
+		time.RFC3339,
+		"2006-01-02 15:04:05.000",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("Format tanggal '%s' tidak valid (gunakan format YYYY-MM-DD)", s)
+}
+
+func CalculateInstallmentDate(startDate time.Time, monthIndex int, installmentDay int) time.Time {
+	targetYear := startDate.Year()
+	targetMonth := int(startDate.Month()) + monthIndex
+	for targetMonth > 12 {
+		targetYear++
+		targetMonth -= 12
+	}
+
+	lastDayOfMonth := time.Date(targetYear, time.Month(targetMonth+1), 0, 0, 0, 0, 0, startDate.Location()).Day()
+
+	day := installmentDay
+	if day <= 0 || day > 31 {
+		day = startDate.Day()
+	}
+	if day > lastDayOfMonth {
+		day = lastDayOfMonth
+	}
+	return time.Date(targetYear, time.Month(targetMonth), day, 0, 0, 0, 0, startDate.Location())
+}
+
+func NormalizeRmsBunga(input string) string {
+	s := strings.ToUpper(strings.TrimSpace(input))
+	switch {
+	case s == "2" || strings.Contains(s, "ANUITAS"):
+		return "2"
+	case s == "4" || strings.Contains(s, "FLAT"):
+		return "4"
+	case s == "5" || strings.Contains(s, "EFEKTIF"):
+		return "5"
+	default:
+		if s == "" {
+			return "4"
+		}
+		return s
+	}
+}
+
+func RmsBungaLabel(rms string) string {
+	switch NormalizeRmsBunga(rms) {
+	case "2":
+		return "ANUITAS"
+	case "4":
+		return "FLAT"
+	case "5":
+		return "EFEKTIF"
+	default:
+		return "FLAT"
+	}
+}
+
+func NormalizeJnsAngsur(input string) string {
+	s := strings.TrimSpace(input)
+	if s == "1" || strings.EqualFold(s, "Bunga") {
+		return "1"
+	}
+	return "2"
+}
+
+func JnsAngsurLabel(jns string) string {
+	if NormalizeJnsAngsur(jns) == "1" {
+		return "Bunga"
+	}
+	return "Pokok + Bunga"
+}
+
+type InstallmentScheduleRow struct {
+	AngsurKe int
+	TglVal   time.Time
+	PokokJdw float64
+	BungaJdw float64
+	Total    float64
+	OsdebJdw float64
+	BcadHari float64
+}
+
+func GenerateLoanSchedule(plafon float64, tenor int, annualRate float64, rmsbunga string, jnsangsur string, tglAwal time.Time, tglAngsur int) ([]InstallmentScheduleRow, float64, float64, float64, float64) {
+	monthlyRate := (annualRate / 100.0) / 12.0
+	schedule := make([]InstallmentScheduleRow, tenor)
+
+	var angsurDeb, angsPokok, angsBunga, totBng float64
+
+	if jnsangsur == "1" {
+		// Angsuran Bunga saja setiap bulan, Pokok dibayar di akhir tempo
+		angsBunga = Round2(plafon * monthlyRate)
+		angsPokok = 0
+		angsurDeb = angsBunga
+		totBng = Round2(angsBunga * float64(tenor))
+
+		curOsdeb := plafon
+		for i := 1; i <= tenor; i++ {
+			tglVal := CalculateInstallmentDate(tglAwal, i, tglAngsur)
+			var p float64
+			b := angsBunga
+			if i == tenor {
+				p = curOsdeb
+				curOsdeb = 0
+			} else {
+				p = 0
+			}
+			schedule[i-1] = InstallmentScheduleRow{
+				AngsurKe: i,
+				TglVal:   tglVal,
+				PokokJdw: p,
+				BungaJdw: b,
+				Total:    Round2(p + b),
+				OsdebJdw: Round2(curOsdeb),
+				BcadHari: Round2(b / 30.0),
+			}
+		}
+		return schedule, angsurDeb, angsPokok, angsBunga, totBng
+	}
+
+	// JnsAngsur == "2" (Pokok + Bunga)
+	switch rmsbunga {
+	case "4": // FLAT
+		angsPokok = Round2(plafon / float64(tenor))
+		angsBunga = Round2(plafon * monthlyRate)
+		angsurDeb = Round2(angsPokok + angsBunga)
+		totBng = Round2(angsBunga * float64(tenor))
+
+		curOsdeb := plafon
+		for i := 1; i <= tenor; i++ {
+			tglVal := CalculateInstallmentDate(tglAwal, i, tglAngsur)
+			p := angsPokok
+			b := angsBunga
+			if i == tenor {
+				p = Round2(curOsdeb) // penyesuaian sisa saldo akhir agar tepat 0
+			}
+			curOsdeb = Round2(curOsdeb - p)
+			if curOsdeb < 0 {
+				curOsdeb = 0
+			}
+			schedule[i-1] = InstallmentScheduleRow{
+				AngsurKe: i,
+				TglVal:   tglVal,
+				PokokJdw: p,
+				BungaJdw: b,
+				Total:    Round2(p + b),
+				OsdebJdw: curOsdeb,
+				BcadHari: Round2(b / 30.0),
+			}
+		}
+
+	case "5": // EFEKTIF (Sliding Rate)
+		basePokok := Round2(plafon / float64(tenor))
+		curOsdeb := plafon
+		totBng = 0
+
+		for i := 1; i <= tenor; i++ {
+			tglVal := CalculateInstallmentDate(tglAwal, i, tglAngsur)
+			p := basePokok
+			if i == tenor {
+				p = Round2(curOsdeb)
+			}
+			b := Round2(curOsdeb * monthlyRate)
+			totBng += b
+			curOsdeb = Round2(curOsdeb - p)
+			if curOsdeb < 0 {
+				curOsdeb = 0
+			}
+
+			if i == 1 {
+				angsPokok = p
+				angsBunga = b
+				angsurDeb = Round2(p + b)
+			}
+
+			schedule[i-1] = InstallmentScheduleRow{
+				AngsurKe: i,
+				TglVal:   tglVal,
+				PokokJdw: p,
+				BungaJdw: b,
+				Total:    Round2(p + b),
+				OsdebJdw: curOsdeb,
+				BcadHari: Round2(b / 30.0),
+			}
+		}
+		totBng = Round2(totBng)
+
+	case "2": // ANUITAS
+		if monthlyRate > 0 {
+			factor := math.Pow(1.0+monthlyRate, float64(tenor))
+			angsurDeb = Round2(plafon * (monthlyRate * factor) / (factor - 1.0))
+		} else {
+			angsurDeb = Round2(plafon / float64(tenor))
+		}
+
+		curOsdeb := plafon
+		totBng = 0
+
+		for i := 1; i <= tenor; i++ {
+			tglVal := CalculateInstallmentDate(tglAwal, i, tglAngsur)
+			b := Round2(curOsdeb * monthlyRate)
+			var p float64
+			if i == tenor {
+				p = Round2(curOsdeb)
+			} else {
+				p = Round2(angsurDeb - b)
+			}
+			totBng += b
+			curOsdeb = Round2(curOsdeb - p)
+			if curOsdeb < 0 {
+				curOsdeb = 0
+			}
+
+			if i == 1 {
+				angsPokok = p
+				angsBunga = b
+			}
+
+			schedule[i-1] = InstallmentScheduleRow{
+				AngsurKe: i,
+				TglVal:   tglVal,
+				PokokJdw: p,
+				BungaJdw: b,
+				Total:    Round2(p + b),
+				OsdebJdw: curOsdeb,
+				BcadHari: Round2(b / 30.0),
+			}
+		}
+		totBng = Round2(totBng)
+
+	default: // Default FLAT
+		angsPokok = Round2(plafon / float64(tenor))
+		angsBunga = Round2(plafon * monthlyRate)
+		angsurDeb = Round2(angsPokok + angsBunga)
+		totBng = Round2(angsBunga * float64(tenor))
+
+		curOsdeb := plafon
+		for i := 1; i <= tenor; i++ {
+			tglVal := CalculateInstallmentDate(tglAwal, i, tglAngsur)
+			p := angsPokok
+			b := angsBunga
+			if i == tenor {
+				p = Round2(curOsdeb)
+			}
+			curOsdeb = Round2(curOsdeb - p)
+			if curOsdeb < 0 {
+				curOsdeb = 0
+			}
+			schedule[i-1] = InstallmentScheduleRow{
+				AngsurKe: i,
+				TglVal:   tglVal,
+				PokokJdw: p,
+				BungaJdw: b,
+				Total:    Round2(p + b),
+				OsdebJdw: curOsdeb,
+				BcadHari: Round2(b / 30.0),
+			}
+		}
+	}
+
+	return schedule, angsurDeb, angsPokok, angsBunga, totBng
+}
+
+func FormatCrBayar(cr string) string {
+	switch strings.ToUpper(strings.TrimSpace(cr)) {
+	case "R":
+		return "Tabungan"
+	case "T":
+		return "Tunai"
+	case "B":
+		return "Bank"
+	default:
+		return cr
+	}
+}
+
+func FormatStsTrn(sts string) string {
+	switch strings.TrimSpace(sts) {
+	case "01":
+		return "Pembayaran Angsuran"
+	case "02":
+		return "Pelunasan Kredit"
+	default:
+		return sts
+	}
+}
+

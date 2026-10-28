@@ -66,3 +66,122 @@ type ReqDataAnggota struct {
 	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
 	CNO   string `json:"cno" gorm:"column:cno"`
 }
+
+type ReqDataRekening struct {
+	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
+	NOAC  string `json:"noac" gorm:"column:noac"`
+}
+
+type ReqSetorSimpanan struct {
+	KDCAB      string  `json:"kdcab"`
+	NOAC       string  `json:"noac"`
+	NOMINAL    float64 `json:"nominal"`
+	KETERANGAN string  `json:"keterangan"`
+}
+
+type ReqDaftarRekening struct {
+	KDCAB string `json:"kdcab"`
+	CNO   string `json:"cno"`
+}
+
+type ReqTarikSimpanan struct {
+	KDCAB      string  `json:"kdcab"`
+	NOAC       string  `json:"noac"`
+	NOMINAL    float64 `json:"nominal"`
+	KETERANGAN string  `json:"keterangan"`
+}
+
+type ReqTransferSimpanan struct {
+	NOAC_ASAL   string  `json:"noac_asal"`
+	NOAC_TUJUAN string  `json:"noac_tujuan"`
+	NOMINAL     float64 `json:"nominal"`
+	KETERANGAN  string  `json:"keterangan"`
+}
+
+type ReqGetMutasi struct {
+	NOAC      string `json:"noac"`
+	TGL_AWAL  string `json:"tgl_awal"`
+	TGL_AKHIR string `json:"tgl_akhir"`
+}
+
+type ReqTutupRekening struct {
+	KDCAB       string `json:"kdcab"`
+	NOAC        string `json:"noac"`
+	NOAC_TUJUAN string `json:"noac_tujuan"`
+	ALASAN      string `json:"alasan"`
+}
+
+type ReqPinjamanBaru struct {
+	KDCAB       string  `json:"kdcab"`
+	CNO         string  `json:"cno"`
+	JENIS       string  `json:"jenis"`
+	PLF_DEBITUR float64 `json:"plf_debitur"`
+	JK_WKTAWAL  int64   `json:"jk_wktawal"`
+	BUNGA       float64 `json:"bunga"`
+	RMSBUNGA    string  `json:"rmsbunga"`
+	JNSANGSUR   string  `json:"jnsangsur"`
+	JNSKREDIT   string  `json:"jnskredit"`
+	TGL_AWAL    string  `json:"tgl_awal"`
+	TGLANGSUR   int     `json:"tglangsur"`
+	PROVISI     float64 `json:"provisi"`
+	ADM         float64 `json:"adm"`
+	NOAC        string  `json:"noac"`
+	KODEAO      string  `json:"kodeao"`
+	NOREF       string  `json:"noref"`
+	KETERANGAN  string  `json:"keterangan"`
+	NLJAMINAN   float64 `json:"nljaminan"`
+}
+
+type ReqGetJadwalAngsuran struct {
+	KDCAB string `json:"kdcab"`
+	NOFAS string `json:"nofas"`
+}
+
+type ReqDaftarPinjaman struct {
+	KDCAB string `json:"kdcab"`
+	CNO   string `json:"cno"`
+}
+
+type ReqDataPinjaman struct {
+	KDCAB string `json:"kdcab"`
+	NOFAS string `json:"nofas"`
+}
+
+type ReqTagihanPinjaman struct {
+	KDCAB string `json:"kdcab"`
+	NOFAS string `json:"nofas"`
+}
+
+type ReqSimulasiPinjaman struct {
+	PLF_DEBITUR float64 `json:"plf_debitur"`
+	JK_WKTAWAL  int64   `json:"jk_wktawal"`
+	BUNGA       float64 `json:"bunga"`
+	RMSBUNGA    string  `json:"rmsbunga"`
+	JNSANGSUR   string  `json:"jnsangsur"`
+	TGL_AWAL    string  `json:"tgl_awal"`
+	TGLANGSUR   int     `json:"tglangsur"`
+}
+
+type ReqBayarAngsuran struct {
+	KDCAB      string  `json:"kdcab"`
+	NOFAS      string  `json:"nofas"`
+	ANGSURKE   int     `json:"angsurke"`
+	CRBAYAR    string  `json:"crbayar"`
+	NOAC_DEBET string  `json:"noac_debet"`
+	NOMINAL    float64 `json:"nominal"`
+	KETERANGAN string  `json:"keterangan"`
+}
+
+type ReqPelunasanKredit struct {
+	KDCAB      string `json:"kdcab"`
+	NOFAS      string `json:"nofas"`
+	CRBAYAR    string `json:"crbayar"`
+	NOAC_DEBET string `json:"noac_debet"`
+	KETERANGAN string `json:"keterangan"`
+}
+
+type ReqRiwayatBayar struct {
+	KDCAB string `json:"kdcab"`
+	NOFAS string `json:"nofas"`
+}
+
