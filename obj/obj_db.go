@@ -145,3 +145,157 @@ type RET500 struct {
 	DOTR       *time.Time `json:"dotr" gorm:"column:dotr"`
 	STATUS     *string    `json:"status" gorm:"column:status"` // mandatory
 }
+
+type KRD100 struct {
+	KDCAB      string     `json:"kdcab" gorm:"column:kdcab;primaryKey"`
+	CNO        string     `json:"cno" gorm:"column:cno;primaryKey"`
+	NOFAS      string     `json:"nofas" gorm:"column:nofas;primaryKey"`
+	JENIS      *string    `json:"jenis" gorm:"column:Jenis"`
+	JNSANGSUR  *string    `json:"jnsangsur" gorm:"column:JnsAngsur"`
+	JNSKREDIT  *string    `json:"jnskredit" gorm:"column:Jnskredit"`
+	PLFDEBITUR *float64   `json:"plf_debitur" gorm:"column:plf_debitur"`
+	JKWKTAWAL  *float64   `json:"jk_wktawal" gorm:"column:jk_wktawal"`
+	BUNGA      *float64   `json:"bunga" gorm:"column:Bunga"`
+	TGLAWAL    *time.Time `json:"tgl_awal" gorm:"column:tgl_awal"`
+	JTTEMPO    *time.Time `json:"jt_tempo" gorm:"column:jt_tempo"`
+	TGLANGS    *time.Time `json:"tglangs" gorm:"column:tglangs"`
+	TGLACCRUE  *time.Time `json:"tglaccrue" gorm:"column:TglAccrue"`
+	FLAGBAYAR  *string    `json:"flagbayar" gorm:"column:flagbayar"`
+	TGLANGSUR  *float64   `json:"tglangsur" gorm:"column:tglangsur"`
+	TGLLUNAS   *time.Time `json:"tgl_lunas" gorm:"column:tgl_lunas"`
+	NLDENDA    *float64   `json:"nldenda" gorm:"column:nldenda"`
+	RMSBUNGA   *string    `json:"rmsbunga" gorm:"column:rmsbunga"`
+	SLDAKHIR   *float64   `json:"sldakhir" gorm:"column:sldakhir"`
+	ANGSURDEB  *float64   `json:"angsur_deb" gorm:"column:angsur_deb"`
+	TOTBNG     *float64   `json:"totbng" gorm:"column:totbng"`
+	CADHARI    *float64   `json:"cadhari" gorm:"column:cadhari"`
+	BCADHARI   *float64   `json:"bcadhari" gorm:"column:bcadhari"`
+	BCADANG    *float64   `json:"bcadang" gorm:"column:bcadang"`
+	BJMLHARI   *float64   `json:"bjmlhari" gorm:"column:bjmlhari"`
+	PROVISI    *float64   `json:"provisi" gorm:"column:provisi"`
+	ADM        *float64   `json:"adm" gorm:"column:Adm"`
+	TOTALBIAYA *float64   `json:"total_biaya" gorm:"column:TotalBiaya"`
+	ANGSPOKOK  *float64   `json:"angspokok" gorm:"column:angspokok"`
+	ANGSBUNGA  *float64   `json:"angsbunga" gorm:"column:angsbunga"`
+	NLPPAP     *float64   `json:"nlppap" gorm:"column:Nlppap"`
+	NOTARIS    *string    `json:"notaris" gorm:"column:Notaris"`
+	ASSJIWA    *string    `json:"assjiwa" gorm:"column:Assjiwa"`
+	NOAC       *string    `json:"noac" gorm:"column:Noac"`
+	TGLEOD     *time.Time `json:"tgleod" gorm:"column:tgleod"`
+	KODEAO     *string    `json:"kodeao" gorm:"column:KodeAO"`
+	KOLEK      *string    `json:"kolek" gorm:"column:Kolek"`
+	NLJAMINAN  *float64   `json:"nljaminan" gorm:"column:Nljaminan"`
+	NOREF      *string    `json:"noref" gorm:"column:Noref"`
+	NOFASOLD   *string    `json:"nofasold" gorm:"column:nofasold"`
+	SALDOOLD   *float64   `json:"saldoold" gorm:"column:saldoold"`
+	FLGKMB     *string    `json:"flgkmb" gorm:"column:flgkmb"`
+	BACKKET    *string    `json:"backket" gorm:"column:Backket"`
+	STSKRD     *string    `json:"stskrd" gorm:"column:Stskrd"`
+	STSDEB     *string    `json:"stsdeb" gorm:"column:Stsdeb"`
+	FOTOKTP    *string    `json:"fotoktp" gorm:"column:fotoktp"`
+	STATUS     *string    `json:"status" gorm:"column:Status"`
+	USRID      *string    `json:"usrid" gorm:"column:usrid"`
+	DUPD       *time.Time `json:"dupd" gorm:"column:dupd"`
+	OTR        *string    `json:"otr" gorm:"column:otr"`
+	DOTR       *time.Time `json:"dotr" gorm:"column:dotr"`
+}
+
+func (KRD100) TableName() string {
+	return "KRD100"
+}
+
+type KRDANGS struct {
+	KDCAB     string     `json:"kdcab" gorm:"column:kdcab;primaryKey"`
+	NOFAS     string     `json:"nofas" gorm:"column:nofas;primaryKey"`
+	ANGSURKE  float64    `json:"angsurke" gorm:"column:angsurke;primaryKey"`
+	TGLVAL    time.Time  `json:"tglval" gorm:"column:tglval;primaryKey"`
+	TGLBYR    *time.Time `json:"tglbyr" gorm:"column:tglbyr"`
+	POKOKJDW  *float64   `json:"pokok_jdw" gorm:"column:PokokJdw"`
+	BUNGAJDW  *float64   `json:"bunga_jdw" gorm:"column:BungaJdw"`
+	OSDEBJDW  *float64   `json:"osdeb_jdw" gorm:"column:OsdebJdw"`
+	NLPOKOK   *float64   `json:"nlpokok" gorm:"column:nlpokok"`
+	NLBUNGA   *float64   `json:"nlbunga" gorm:"column:nlbunga"`
+	NLDENDA   *float64   `json:"nldenda" gorm:"column:nldenda"`
+	NLSALDO   *float64   `json:"nlsaldo" gorm:"column:nlsaldo"`
+	BNGHARI   *float64   `json:"bnghari" gorm:"column:bnghari"`
+	BCADHARI  *float64   `json:"bcadhari" gorm:"column:bcadhari"`
+	FLAGBAYAR *string    `json:"flagbayar" gorm:"column:flagbayar"`
+	STATUS    *string    `json:"status" gorm:"column:status"`
+	USRID     *string    `json:"usrid" gorm:"column:usrid"`
+	DUPD      *time.Time `json:"dupd" gorm:"column:dupd"`
+	OTR       *string    `json:"otr" gorm:"column:otr"`
+	DOTR      *time.Time `json:"dotr" gorm:"column:dotr"`
+}
+
+func (KRDANGS) TableName() string {
+	return "KRDANGS"
+}
+
+type PRODUK struct {
+	KDPRODUK    string     `json:"kd_produk" gorm:"column:kd_produk;primaryKey"`
+	NMPRODUK    *string    `json:"nm_produk" gorm:"column:nm_produk"`
+	FLGJMN      *string    `json:"flgjmn" gorm:"column:flgjmn"`
+	JNSANG      *string    `json:"jnsang" gorm:"column:jnsang"`
+	RMSBUNGA    *string    `json:"rmsbunga" gorm:"column:rmsbunga"`
+	BASERATE    *float64   `json:"baserate" gorm:"column:baserate"`
+	BULAT       *float64   `json:"bulat" gorm:"column:bulat"`
+	JNSPINJAMAN *string    `json:"jnspinjaman" gorm:"column:jnspinjaman"`
+	GLNO        *string    `json:"glno" gorm:"column:glno"`
+	HARIDENDA   *float64   `json:"hari_denda" gorm:"column:hari_denda"`
+	PERSENDENDA *float64   `json:"persen_denda" gorm:"column:persen_denda"`
+	PENALTY     *float64   `json:"penalty" gorm:"column:penalty"`
+	FLGACCRUE   *string    `json:"flgaccrue" gorm:"column:flgaccrue"`
+	FLGDENDA    *string    `json:"flgdenda" gorm:"column:flgdenda"`
+	USRID       *string    `json:"usrid" gorm:"column:usrid"`
+	DUPD        *time.Time `json:"dupd" gorm:"column:dupd"`
+	OTR         *string    `json:"otr" gorm:"column:otr"`
+	DOTR        *time.Time `json:"dotr" gorm:"column:dotr"`
+	STSOTR      *string    `json:"stsotr" gorm:"column:stsotr"`
+}
+
+func (PRODUK) TableName() string {
+	return "PRODUK"
+}
+
+type KRDH400 struct {
+	KDCAB   string     `json:"kdcab" gorm:"column:kdcab;primaryKey"`
+	NOFAS   string     `json:"nofas" gorm:"column:nofas;primaryKey"`
+	NOREF   string     `json:"noref" gorm:"column:noref;primaryKey"`
+	TGLTRN  time.Time  `json:"tgltrn" gorm:"column:tgltrn"`
+	CRBAYAR *string    `json:"crbayar" gorm:"column:Crbayar"`
+	NOACDB  *string    `json:"noacdb" gorm:"column:Noacdb"`
+	NOGL    *string    `json:"nogl" gorm:"column:Nogl"`
+	STSTRN  *string    `json:"ststrn" gorm:"column:Ststrn"`
+	KET     *string    `json:"ket" gorm:"column:Ket"`
+	STATUS  *string    `json:"status" gorm:"column:Status"`
+	USRID   *string    `json:"usrid" gorm:"column:usrid"`
+	DUPD    *time.Time `json:"dupd" gorm:"column:dupd"`
+}
+
+func (KRDH400) TableName() string {
+	return "KRDH400"
+}
+
+type KRD400 struct {
+	KDCAB     string     `json:"kdcab" gorm:"column:kdcab;primaryKey"`
+	NOFAS     string     `json:"nofas" gorm:"column:nofas;primaryKey"`
+	ANGSURKE  float64    `json:"angsurke" gorm:"column:angsurke;primaryKey"`
+	NOREF     string     `json:"noref" gorm:"column:noref;primaryKey"`
+	TGLTRN    time.Time  `json:"tgltrn" gorm:"column:tgltrn"`
+	TGLVAL    *time.Time `json:"tglval" gorm:"column:tglval"`
+	NLPOKOK   *float64   `json:"nlpokok" gorm:"column:nlpokok"`
+	NLBUNGA   *float64   `json:"nlbunga" gorm:"column:nlbunga"`
+	NLDENDA   *float64   `json:"nldenda" gorm:"column:nldenda"`
+	NLPINALTY *float64   `json:"nlpinalty" gorm:"column:nlpinalty"`
+	NO_BATCH  *string    `json:"no_batch" gorm:"column:no_batch"`
+	STATUS    *string    `json:"status" gorm:"column:status"`
+	USRID     *string    `json:"usrid" gorm:"column:usrid"`
+	DUPD      *time.Time `json:"dupd" gorm:"column:dupd"`
+	OTR       *string    `json:"otr" gorm:"column:otr"`
+	DOTR      *time.Time `json:"dotr" gorm:"column:dotr"`
+}
+
+func (KRD400) TableName() string {
+	return "KRD400"
+}
+
