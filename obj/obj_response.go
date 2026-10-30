@@ -295,3 +295,11 @@ type ResRiwayatBayarItem struct {
 	TOTAL        float64 `json:"total"`
 }
 
+type ResLoginAnggota struct {
+	ACCESS_TOKEN  string `json:"access_token"`
+	REFRESH_TOKEN string `json:"refresh_token"`
+}
+
+type ResRefreshSessionAnggota struct {
+	ACCESS_TOKEN string `json:"access_token"`
+}

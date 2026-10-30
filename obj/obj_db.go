@@ -62,6 +62,7 @@ type MSTCST struct {
 	DUPD       *time.Time   `json:"dupd" gorm:"column:dupd"`   // mandatory
 	OTR        *string      `json:"otr" gorm:"column:otr"`
 	DOTR       *time.Time   `json:"dotr" gorm:"column:dotr"`
+	PIN        *string      `json:"pin" gorm:"column:pin"`
 }
 
 type SHDBLC struct {
@@ -298,4 +299,3 @@ type KRD400 struct {
 func (KRD400) TableName() string {
 	return "KRD400"
 }
-

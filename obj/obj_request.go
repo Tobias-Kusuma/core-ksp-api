@@ -49,6 +49,9 @@ type ReqAnggotaBaruDetail struct {
 	NMIBU    string `json:"nmibu" gorm:"column:nmibu"`       // mandatory
 	STSPOKOK string `json:"stspokok" gorm:"column:stspokok"` // mandatory
 	STSWAJIB string `json:"stswajib" gorm:"column:stswajib"` // mandatory
+
+	// kebutuhan login aplikasi mobile koperasi
+	PIN string `json:"pin" gorm:"pin"`
 }
 
 type ReqAnggotaBaru struct {
@@ -185,3 +188,14 @@ type ReqRiwayatBayar struct {
 	NOFAS string `json:"nofas"`
 }
 
+type ReqLoginAnggota struct {
+	KDCAB string `json:"kdcab"`
+	CNO   string `json:"cno"`
+	PIN   string `json:"pin"`
+}
+
+type ReqRefreshSessionAnggota struct {
+	KDCAB         string `json:"kdcab"`
+	CNO           string `json:"cno"`
+	REFRESH_TOKEN string `json:"refresh_token"`
+}

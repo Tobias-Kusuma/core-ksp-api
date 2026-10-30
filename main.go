@@ -41,7 +41,10 @@ func main() {
 
 	// inisiasi router
 	router := gin.New()
+
+	// tambah middleware
 	router.Use(gin.Logger(), helper.ResponseLogger(), gin.Recovery(), helper.RequestLogger(), helper.ContextCleaner())
+
 	// Tulis default error di dalam middleware agar body response ikut tercatat.
 	router.NoRoute(func(c *gin.Context) { c.String(http.StatusNotFound, "404 page not found") })
 	router.NoMethod(func(c *gin.Context) { c.String(http.StatusMethodNotAllowed, "405 method not allowed") })

@@ -36,21 +36,21 @@ type AppTx struct {
 
 // struct claim untuk otentikasi jwt
 type CustomClaims struct {
-	DEVICEID  string `json:"deviceid"`
-	NOHP      string `json:"nohp"`
-	ID        string `json:"id"`
+	// DEVICEID  string `json:"deviceid"`
+	// NOHP      string `json:"nohp"`
+	// ID        string `json:"id"`
 	KDCAB     string `json:"kdcab"`
 	CNO       string `json:"cno"`
-	NAMA      string `json:"nama"`
+	CNM       string `json:"cnm"`
 	TOKENTYPE string `json:"token_type"`
 	jwt.RegisteredClaims
 }
 
 type DetailCust struct {
-	DEVICEID string `json:"deviceid" gorm:"column:deviceid"`
-	NOHP     string `json:"nohp" gorm:"column:nohp"`
-	ID       string `json:"id" gorm:"column:id"`
-	KDCAB    string `json:"kdcab" gorm:"column:kdcab"`
-	CNO      string `json:"cno" gorm:"column:cno"`
-	NAMA     string `json:"nama" gorm:"column:nama"`
+	// DEVICEID string `json:"deviceid" gorm:"column:deviceid"`
+	// NOHP     string `json:"nohp" gorm:"column:nohp"`
+	// ID       string `json:"id" gorm:"column:id"`
+	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
+	CNO   string `json:"cno" gorm:"column:cno"`
+	CNM   string `json:"cnm" gorm:"column:cnm"`
 }

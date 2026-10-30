@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -107,6 +108,27 @@ func ContextCleaner() gin.HandlerFunc {
 		}()
 		c.Next()
 	}
+}
+
+// mengambil data user yang disimpan oleh middleware JwtAuth ke context;
+func GetDetailCust(c *gin.Context) (*obj.DetailCust, error) {
+	caller := getCallerOutsideHelper()
+
+	if c == nil {
+		return nil, fmt.Errorf("context tidak tersedia. Func called from %s", caller)
+	}
+
+	value, exists := c.Get("detail-cust")
+	if !exists {
+		return nil, fmt.Errorf("data user tidak ditemukan dalam context. Func called from %s", caller)
+	}
+
+	user, ok := value.(*obj.DetailCust)
+	if !ok || user == nil {
+		return nil, fmt.Errorf("data user dalam context tidak valid. Func called from %s", caller)
+	}
+
+	return user, nil
 }
 
 // mengembalikan instance dari session context/connection wrapper, dan parsing JSON ke instance reference;
@@ -536,7 +558,7 @@ func LogHisQuery(db *gorm.DB, usrid string, modul string, funcname string, logqu
 // ==========================================================
 type MaskedError struct {
 	Number  int    // e.g. 2601, 2627, dll
-	Code    string // e.g. DUPE_UNIQUE, DUPE_PK, TOO_LONG, BAD_CONVERSION, GENERAL
+	Code    string // e.g. NOT_FOUND, DUPE_UNIQUE, DUPE_PK, TOO_LONG, BAD_CONVERSION, GENERAL
 	Message string // user-facing
 }
 
@@ -544,9 +566,18 @@ type MaskedError struct {
 func (e MaskedError) Error() string { return e.Message }
 
 // MaskSQLError mengubah error mentah menjadi MaskedError
-func MaskSQLError(err error) error {
+// rowsAffected opsional untuk query yang tidak mengembalikan error ketika data kosong.
+func MaskSQLError(err error, rowsAffected ...int64) error {
 	if err == nil {
+		if len(rowsAffected) > 0 && rowsAffected[0] == 0 {
+			return MaskedError{Number: 0, Code: "NOT_FOUND", Message: "Data tidak ditemukan."}
+		}
 		return nil
+	}
+
+	// data tidak ditemukan (termasuk error yang dibungkus)
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows) {
+		return MaskedError{Number: 0, Code: "NOT_FOUND", Message: "Data tidak ditemukan."}
 	}
 
 	// 1) shortcut: GORM duplicated-key (jaga-jaga untuk driver lain)
@@ -585,6 +616,13 @@ func MaskSQLError(err error) error {
 
 	// 3) fallback berbasis teks (kalau bukan mssql.Error, atau lewat layer lain)
 	up := strings.ToUpper(err.Error())
+
+	// not found / 0 records
+	if strings.Contains(up, "RECORD NOT FOUND") ||
+		strings.Contains(up, "NO ROWS IN RESULT SET") ||
+		strings.Contains(up, "0 RECORDS") {
+		return MaskedError{Number: 0, Code: "NOT_FOUND", Message: "Data tidak ditemukan."}
+	}
 
 	// duplicate
 	if strings.Contains(up, "DUPLICATE KEY") || strings.Contains(up, "UNIQUE") {
@@ -1312,4 +1350,3 @@ func FormatStsTrn(sts string) string {
 		return sts
 	}
 }
-

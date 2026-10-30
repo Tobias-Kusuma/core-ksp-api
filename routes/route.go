@@ -3,6 +3,7 @@ package routes
 import (
 	"fmt"
 
+	"github.com/Tobias-Kusuma/core-ksp-api/auth"
 	"github.com/Tobias-Kusuma/core-ksp-api/controller"
 	db "github.com/Tobias-Kusuma/core-ksp-api/database"
 	"github.com/Tobias-Kusuma/core-ksp-api/helper"
@@ -34,21 +35,31 @@ func DefaultRoutes(routerEngine *gin.Engine) {
 				helper.RespondMaskedOk(c, "Berhasil terhubung dengan database", nil)
 			}
 		})
+
+		// login anggota
+		defaultGroup.POST("/loginanggota", controller.LoginAnggota())
 	}
 }
 
 func AnggotaRoute(routerEngine *gin.Engine) {
-	// terbuka untuk publik tanpa authentication dan authorization
-	anggotaGroup := routerEngine.Group("/anggota")
+	pendaftaranGroup := routerEngine.Group("/anggota")
 	{
 		// pendaftaran anggota
-		anggotaGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
+		pendaftaranGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
+	}
 
-		// get daftar anggota
-		anggotaGroup.POST("/getdaftaranggota", controller.GetDaftarAnggota())
-
+	anggotaGroup := routerEngine.Group("/anggota")
+	anggotaGroup.Use(auth.RequestIdAuth(), auth.TimestampAuth(), auth.JwtAuth(), auth.SignatureAuth())
+	{
 		// get data anggota
 		anggotaGroup.POST("/getdataanggota", controller.GetDataAnggota())
+
+		// refresh session anggota
+		anggotaGroup.POST("/refreshsession", controller.RefreshSessionAnggota())
+
+		/* NOT USED : API LANGSUNG DICONSUME OLEH END-USER */
+		// // get daftar anggota
+		// anggotaGroup.POST("/getdaftaranggota", controller.GetDaftarAnggota())
 	}
 }
 
