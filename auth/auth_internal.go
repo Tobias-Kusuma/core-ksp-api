@@ -25,6 +25,54 @@ var (
 	signSecret []byte
 )
 
+// generate access token
+func GenerateAccessToken( /*deviceid string, phone string, userid string,*/ kdcab string, cno string, cnm string) (string, error) {
+	claims := obj.CustomClaims{
+		// DEVICEID:  deviceid,
+		// NOHP:      phone,
+		// ID:        userid,
+		KDCAB:     kdcab,
+		CNO:       cno,
+		CNM:       cnm,
+		TOKENTYPE: "access",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * 7 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "github.com/Tobias-Kusuma/core-ksp-api",
+			Subject:   cnm,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	return token.SignedString(jwtKey)
+}
+
+// generate access token
+func GenerateRefreshToken( /*deviceid string, phone string, userid string,*/ kdcab string, cno string, cnm string) (string, error) {
+	claims := obj.CustomClaims{
+		// DEVICEID:  deviceid,
+		// NOHP:      phone,
+		// ID:        userid,
+		KDCAB:     kdcab,
+		CNO:       cno,
+		CNM:       cnm,
+		TOKENTYPE: "refresh",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * 21 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "github.com/Tobias-Kusuma/core-ksp-api",
+			Subject:   cnm,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	return token.SignedString(jwtKey)
+}
+
 // Otentikasi menggunakan JWT
 // ============================================
 func SetJwtKey() {
@@ -34,30 +82,6 @@ func SetJwtKey() {
 	// }
 
 	jwtKey = []byte(os.Getenv("JWTKEY"))
-}
-
-// generate token
-func GenerateToken(deviceid string, phone string, userid string, kdcab string, cno string, username string) (string, error) {
-	claims := obj.CustomClaims{
-		DEVICEID:  deviceid,
-		NOHP:      phone,
-		ID:        userid,
-		KDCAB:     kdcab,
-		CNO:       cno,
-		NAMA:      username,
-		TOKENTYPE: "access",
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * 10 * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "github.com/Tobias-Kusuma/core-ksp-api",
-			Subject:   username,
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	return token.SignedString(jwtKey)
 }
 
 // validasi token string
@@ -123,7 +147,7 @@ func JwtAuth() gin.HandlerFunc {
 			return
 		}
 
-		if claims.DEVICEID == "" || claims.NOHP == "" || claims.ID == "" || claims.KDCAB == "" || claims.CNO == "" || claims.NAMA == "" {
+		if /* claims.DEVICEID == "" || claims.NOHP == "" || claims.ID == "" || */ claims.KDCAB == "" || claims.CNO == "" || claims.CNM == "" {
 			err := fmt.Errorf("Invalid, detail identitas yang dibutuhkan tidak lengkap")
 			log.Printf("ERROR: %s", err)
 			helper.RespondErrorUnauthorized(c, err)
@@ -132,12 +156,12 @@ func JwtAuth() gin.HandlerFunc {
 
 		// simpan data user ke context biar bisa dipakai handler berikutnya
 		user := &obj.DetailCust{
-			DEVICEID: claims.DEVICEID,
-			NOHP:     claims.NOHP,
-			ID:       claims.ID,
-			KDCAB:    claims.KDCAB,
-			CNO:      claims.CNO,
-			NAMA:     claims.NAMA,
+			// DEVICEID: claims.DEVICEID,
+			// NOHP:     claims.NOHP,
+			// ID:       claims.ID,
+			KDCAB: claims.KDCAB,
+			CNO:   claims.CNO,
+			CNM:   claims.CNM,
 		}
 
 		c.Set("token-string", tokenStr) // digunakan untuk verifikasi signature
@@ -169,13 +193,13 @@ func TimestampAuth() gin.HandlerFunc {
 			return
 		}
 
-		// hitung selisih (absolute), kalau lebih dari 5 menit maka abort
+		// hitung selisih (absolute), kalau lebih dari 30 detik maka abort
 		diff := now.Sub(reqTime)
 		if diff < 0 {
 			diff = -diff
 		}
 
-		if diff > (1 * 5 * time.Minute) {
+		if diff > (1 * 30 * time.Second) {
 			err := fmt.Errorf("Timestamp sudah expired")
 			log.Printf("ERROR: %s", err)
 			helper.RespondErrorUnauthorized(c, err)

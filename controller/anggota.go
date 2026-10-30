@@ -6,11 +6,113 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tobias-Kusuma/core-ksp-api/auth"
 	"github.com/Tobias-Kusuma/core-ksp-api/helper"
 	"github.com/Tobias-Kusuma/core-ksp-api/obj"
 	"github.com/gin-gonic/gin"
 )
 
+// login untuk akun anggota
+func LoginAnggota() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ReqBody obj.ReqLoginAnggota
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		var Anggota obj.MSTCST
+		if err := AppTx.Main.Table("MSTCST").Select("kdcab, cno, cnm, pin").Where("kdcab = ? and cno = ?", ReqBody.KDCAB, ReqBody.CNO).Take(&Anggota).Error; err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		// verifikasi pin
+		if ok := helper.VerifyPassword(ReqBody.PIN, *Anggota.PIN); ok == false {
+			err := fmt.Errorf("No. Nasabah atau PIN yang dimasukkan tidak sesuai!")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		// kalau bener, kasih response berupa token
+		// 1. token akses
+		Acc_token, err := auth.GenerateAccessToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		// 2. token refresh
+		Ref_token, err := auth.GenerateRefreshToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		ResData := obj.ResLoginAnggota{
+			ACCESS_TOKEN:  Acc_token,
+			REFRESH_TOKEN: Ref_token,
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil melakukan login", ResData)
+	}
+}
+
+// refresh token untuk session anggota
+func RefreshSessionAnggota() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ReqBody obj.ReqRefreshSessionAnggota
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		var Anggota obj.MSTCST
+		if err := AppTx.Main.Table("MSTCST").Select("kdcab, cno, cnm").Where("kdcab = ? and cno = ?", ReqBody.KDCAB, ReqBody.CNO).Take(&Anggota).Error; err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		// validasi keabsahan token eak
+		claims, err := auth.ValidateToken(ReqBody.REFRESH_TOKEN)
+		if err != nil {
+			log.Printf("ERROR: Token tidak valid! %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("Token tidak valid!"))
+			return
+		}
+
+		if claims.TOKENTYPE != "refresh" {
+			log.Printf("ERROR: %s", "Tipe token tidak valid! Bukan token bertipe REFRESH")
+			helper.RespondMaskedError(c, true, fmt.Errorf("Tipe token tidak valid!"))
+			return
+		}
+
+		// cocokkan data dari claims, dengan hasil search, dan request
+		if claims.KDCAB != Anggota.KDCAB || claims.CNO != Anggota.CNO || claims.CNM != *Anggota.CNM {
+			err := fmt.Errorf("Invalid, identitas tidak sesuai dengan token claims!")
+			log.Printf("ERROR: Token tidak valid! %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("Token tidak valid!"))
+			return
+		}
+
+		// buatkan access_token yang baru
+		Acc_token, err := auth.GenerateAccessToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+		}
+
+		ResData := obj.ResRefreshSessionAnggota{
+			ACCESS_TOKEN: Acc_token,
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil melakukan refresh session", ResData)
+	}
+}
+
+// registrasi anggota
 func DaftarAnggotaBaru() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ReqBody obj.ReqAnggotaBaru
@@ -118,6 +220,13 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 		// saldo Rp0
 		NolRupiah := 0.00
 
+		// buat pin dihashed
+		HashedPin, err := helper.GenerateHashedPass(ReqBody.ANGGOTA.PIN)
+		if err != nil {
+			log.Printf("ERROR: PIN tidak dalam format yang valid! %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("PIN tidak dalam format yang valid!"))
+		}
+
 		// masukkan ke dalam table
 		trx := AppTx.Main.Begin()
 
@@ -159,6 +268,7 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 			DUPD:      &TglNow,
 			OTR:       &UserInput,
 			DOTR:      &TglNow,
+			PIN:       &HashedPin,
 		}
 		if err := trx.Debug().Table("MSTCST").Create(&DataAnggota).Error; err != nil {
 			trx.Rollback()
@@ -246,25 +356,7 @@ func DaftarAnggotaBaru() gin.HandlerFunc {
 	}
 }
 
-func GetDaftarAnggota() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ReqBody obj.ReqDaftarAnggota
-		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
-		if err != nil {
-			log.Printf("ERROR: %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-		}
-
-		ResData := make([]obj.ResDaftarAnggota, 0)
-		if err := AppTx.Main.Debug().Table("MSTCST").Select("kdcab, cno, tipenas, jnsnas, cnm").Where("kdcab = ?", ReqBody.KDCAB).Scan(&ResData).Error; err != nil {
-			log.Printf("ERROR: %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-		}
-
-		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar anggota", ResData)
-	}
-}
-
+// ambil detail data anggota
 func GetDataAnggota() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ReqBody obj.ReqDataAnggota
@@ -286,6 +378,9 @@ func GetDataAnggota() gin.HandlerFunc {
 			helper.RespondMaskedError(c, false, err)
 		}
 
+		// hapus data pin dari Anggota
+		Anggota.PIN = nil
+
 		ResData := obj.ResDataAnggota{
 			ANGGOTA:         Anggota,
 			DAFTAR_REKENING: DaftarRekening,
@@ -294,3 +389,24 @@ func GetDataAnggota() gin.HandlerFunc {
 		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar anggota", ResData)
 	}
 }
+
+/* NOT USED : API LANGSUNG DICONSUME OLEH END-USER */
+
+// func GetDaftarAnggota() gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		var ReqBody obj.ReqDaftarAnggota
+// 		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+// 		if err != nil {
+// 			log.Printf("ERROR: %s", err.Error())
+// 			helper.RespondMaskedError(c, false, err)
+// 		}
+
+// 		ResData := make([]obj.ResDaftarAnggota, 0)
+// 		if err := AppTx.Main.Debug().Table("MSTCST").Select("kdcab, cno, tipenas, jnsnas, cnm").Where("kdcab = ?", ReqBody.KDCAB).Scan(&ResData).Error; err != nil {
+// 			log.Printf("ERROR: %s", err.Error())
+// 			helper.RespondMaskedError(c, false, err)
+// 		}
+
+// 		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar anggota", ResData)
+// 	}
+// }
