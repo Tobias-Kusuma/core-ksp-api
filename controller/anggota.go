@@ -1,11 +1,19 @@
 package controller
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	"io"
 	"log"
+	"net/http"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Tobias-Kusuma/core-ksp-api/auth"
+	"github.com/Tobias-Kusuma/core-ksp-api/cache"
 	"github.com/Tobias-Kusuma/core-ksp-api/helper"
 	"github.com/Tobias-Kusuma/core-ksp-api/obj"
 	"github.com/gin-gonic/gin"
@@ -19,6 +27,7 @@ func LoginAnggota() gin.HandlerFunc {
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		Kdcab := ReqBody.KDCAB
@@ -30,28 +39,43 @@ func LoginAnggota() gin.HandlerFunc {
 		if err := AppTx.Main.Table("MSTCST").Select("kdcab, cno, cnm, pin").Where("kdcab = ? and cno = ? and nohp = ?", Kdcab, Cno, Nohp).Take(&Anggota).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		// verifikasi pin
 		if ok := helper.VerifyPassword(ReqBody.PIN, *Anggota.PIN); ok == false {
-			err := fmt.Errorf("No. Nasabah atau PIN yang dimasukkan tidak sesuai!")
+			err := fmt.Errorf("no. anggota, no. hp, atau PIN yang dimasukkan tidak sesuai!")
 			log.Printf("ERROR: %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
+			helper.RespondMaskedError(c, true, err)
+			return
 		}
 
 		// kalau bener, kasih response berupa token
+		// 0. siapkan session id
+		newSessionId := helper.GetUUIDString()
+
 		// 1. token akses
-		Acc_token, err := auth.GenerateAccessToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM)
+		Acc_token, err := auth.GenerateAccessToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM, newSessionId)
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		// 2. token refresh
-		Ref_token, err := auth.GenerateRefreshToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM)
+		Ref_token, err := auth.GenerateRefreshToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM, newSessionId)
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		// sesi hanya dibuat saat login, bukan saat refresh token
+		keySessionId := auth.PrefixSessionKey + newSessionId
+		if err := cache.RedisSet(keySessionId, keySessionId, 1*21*time.Minute); err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("Gagal membuat session"))
+			return
 		}
 
 		ResData := obj.ResLoginAnggota{
@@ -71,25 +95,27 @@ func RefreshSessionAnggota() gin.HandlerFunc {
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		var Anggota obj.MSTCST
 		if err := AppTx.Main.Table("MSTCST").Select("kdcab, cno, cnm").Where("kdcab = ? and cno = ?", ReqBody.KDCAB, ReqBody.CNO).Take(&Anggota).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		// validasi keabsahan token eak
 		claims, err := auth.ValidateToken(ReqBody.REFRESH_TOKEN)
 		if err != nil {
 			log.Printf("ERROR: Token tidak valid! %s", err.Error())
-			helper.RespondMaskedError(c, true, fmt.Errorf("Token tidak valid!"))
+			helper.RespondMaskedError(c, true, fmt.Errorf("token tidak valid!"))
 			return
 		}
 
 		if claims.TOKENTYPE != "refresh" {
 			log.Printf("ERROR: %s", "Tipe token tidak valid! Bukan token bertipe REFRESH")
-			helper.RespondMaskedError(c, true, fmt.Errorf("Tipe token tidak valid!"))
+			helper.RespondMaskedError(c, true, fmt.Errorf("tipe token tidak valid!"))
 			return
 		}
 
@@ -97,15 +123,46 @@ func RefreshSessionAnggota() gin.HandlerFunc {
 		if claims.KDCAB != Anggota.KDCAB || claims.CNO != Anggota.CNO || claims.CNM != *Anggota.CNM {
 			err := fmt.Errorf("Invalid, identitas tidak sesuai dengan token claims!")
 			log.Printf("ERROR: Token tidak valid! %s", err.Error())
-			helper.RespondMaskedError(c, true, fmt.Errorf("Token tidak valid!"))
+			helper.RespondMaskedError(c, true, fmt.Errorf("token tidak valid!"))
+			return
+		}
+
+		// token akses dan refresh harus berasal dari sesi dan anggota yang sama
+		DetailCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DetailCust.SESSIONID != claims.SESSIONID || DetailCust.KDCAB != claims.KDCAB || DetailCust.CNO != claims.CNO {
+			log.Printf("ERROR: Session token akses dan refresh tidak sesuai")
+			helper.RespondMaskedError(c, true, fmt.Errorf("session tidak valid!"))
+			return
+		}
+
+		// cek apakah session masih ada di redis
+		keySessionId := auth.PrefixSessionKey + claims.SESSIONID
+		_, isFound, err := cache.RedisGet[string](keySessionId)
+
+		if err != nil {
+			log.Printf("ERROR: Session tidak valid! %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("session tidak valid!"))
+			return
+		}
+
+		if isFound == false {
+			log.Printf("ERROR: Session tidak valid!")
+			helper.RespondMaskedError(c, true, fmt.Errorf("session tidak valid!"))
 			return
 		}
 
 		// buatkan access_token yang baru
-		Acc_token, err := auth.GenerateAccessToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM)
+		Acc_token, err := auth.GenerateAccessToken(Anggota.KDCAB, Anggota.CNO, *Anggota.CNM, claims.SESSIONID)
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		ResData := obj.ResRefreshSessionAnggota{
@@ -113,6 +170,46 @@ func RefreshSessionAnggota() gin.HandlerFunc {
 		}
 
 		helper.RespondMaskedOk(c, "Berhasil melakukan refresh session", ResData)
+	}
+}
+
+// logout session untuk anggota
+func LogoutAnggota() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ReqBody obj.ReqLogoutAnggota
+		_, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		DetailCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DetailCust.KDCAB != ReqBody.KDCAB || DetailCust.CNO != ReqBody.CNO {
+			err := fmt.Errorf("Identitas tidak valid")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// ambil session id
+		SessionId := DetailCust.SESSIONID
+
+		// hapus session id dari cache
+		keySessionId := auth.PrefixSessionKey + SessionId
+		if err := cache.RedisDel(keySessionId); err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil melakukan logout", nil)
 	}
 }
 
@@ -124,6 +221,7 @@ func CreateAkunMobileAnggota() gin.HandlerFunc {
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		// samakan format nama, email, notelp, dan nik
@@ -146,6 +244,7 @@ func CreateAkunMobileAnggota() gin.HandlerFunc {
 			Where("dbo.fn_NormalisasiNama(cnm) as cnm = ?", Nama).Where("nphp = ?", NoTelp).Where("noid = ?", Nik).Take(&ReturnNas).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		// siapkan PIN yang sudah dihash
@@ -153,6 +252,7 @@ func CreateAkunMobileAnggota() gin.HandlerFunc {
 		if err != nil {
 			log.Printf("ERROR: Gagal menyimpan PIN! %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Gagal menyimpan PIN!"))
+			return
 		}
 
 		// update PIN dan nama pasar ke table
@@ -163,9 +263,158 @@ func CreateAkunMobileAnggota() gin.HandlerFunc {
 		if err := AppTx.Main.Table("MSTCST").Where("kdcab = ? and cno = ?", ReqBody.KDCAB, Cno).Updates(&DataUpdate).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		helper.RespondMaskedOk(c, "Berhasil membuat akun mobile", nil)
+	}
+}
+
+// update foto ktp
+func UploadFotoKtp() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, nil)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		// ambil data dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		// maksimal ukuran gambar 4 MiB (4 * 1024 * 1024 bytes)
+		const maxImageSize int64 = 4_000_000
+
+		// maksimal resolusi 20 megapixel
+		const maxImagePixels int64 = 20_000_000
+
+		// 1. Batasi seluruh ukuran HTTP request
+		c.Request.Body = http.MaxBytesReader(
+			c.Writer,
+			c.Request.Body,
+			maxImageSize+(1<<20), // 4 MiB + 1 MiB overhead multipart
+		)
+
+		// 2. Ambil file dari form-data
+		fileHeader, err := c.FormFile("file")
+		if err != nil {
+			log.Printf("ERROR: File gambar tidak ditemukan atau request terlalu besar. %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("file gambar tidak ditemukan atau request terlalu besar"))
+			return
+		}
+
+		// 3. Validasi ukuran file
+		if fileHeader.Size == 0 || fileHeader.Size > maxImageSize {
+			err := fmt.Errorf("ukuran gambar harus antara 1 byte dan 4 MB")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// 4. Validasi ekstensi file
+		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+
+		if ext != ".jpg" {
+			err := fmt.Errorf("file harus berekstensi .jpg")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// 5. Buka file upload
+		file, err := fileHeader.Open()
+		if err != nil {
+			log.Printf("ERROR: Gagal membuka file gambar. %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("gagal membuka file gambar"))
+			return
+		}
+		defer file.Close()
+
+		// 6. Baca file menjadi []byte
+		fileBytes, err := io.ReadAll(io.LimitReader(file, maxImageSize+1))
+		if err != nil {
+			log.Printf("ERROR: Gagal membaca file gambar. %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("gagal membaca file gambar"))
+			return
+		}
+
+		if len(fileBytes) == 0 || int64(len(fileBytes)) > maxImageSize {
+			err := fmt.Errorf("ukuran gambar tidak valid")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// 7. Validasi MIME berdasarkan isi file
+		mimeType := http.DetectContentType(fileBytes)
+
+		if mimeType != "image/jpeg" {
+			err := fmt.Errorf("file harus berformat JPG")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// 8. Validasi header gambar dan dimensi
+		config, format, err := image.DecodeConfig(bytes.NewReader(fileBytes))
+		if err != nil {
+			log.Printf("ERROR: Gagal membaca konfigurasi gambar. %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("file gambar tidak valid"))
+			return
+		}
+
+		if format != "jpeg" || config.Width <= 0 || config.Height <= 0 {
+			err := fmt.Errorf("format atau dimensi gambar tidak valid")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// Batasi total pixel untuk mencegah penggunaan memori berlebihan
+		totalPixels := int64(config.Width) * int64(config.Height)
+
+		if totalPixels > maxImagePixels {
+			err := fmt.Errorf("resolusi gambar terlalu besar (maksimal 20 megapixel)")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// 9. Decode seluruh gambar untuk validasi
+		_, decodedFormat, err := image.Decode(bytes.NewReader(fileBytes))
+		if err != nil {
+			log.Printf("ERROR: Gambar rusak atau tidak dapat di-decode. %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("file JPG rusak atau tidak valid"))
+			return
+		}
+
+		if decodedFormat != "jpeg" {
+			err := fmt.Errorf("format gambar tidak sesuai")
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// 10. Gambar valid dan siap disimpan
+		log.Printf("Upload JPG valid: ukuran=%d bytes, resolusi=%dx%d", len(fileBytes), config.Width, config.Height)
+
+		// fileBytes merupakan []byte asli dari gambar JPG
+
+		// begin transaction
+		trans := AppTx.Main.Begin()
+
+		// simpan ke db
+		DataFoto := map[string]any{
+			"Nasabahpic": fileBytes,
+		}
+		if err := AppTx.Main.Table("MSTCST").Where("kdcab = ? and cno = ?", DataCust.KDCAB, DataCust.CNO).Updates(&DataFoto).Error; err != nil {
+			trans.Rollback()
+			log.Printf("ERROR: Gagal menyimpan foto. %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		trans.Commit()
+		c.JSON(http.StatusOK, gin.H{"kode": "000", "message": "Berhasil simpan foto KTP"})
 	}
 }
 
@@ -177,18 +426,36 @@ func GetDataAnggota() gin.HandlerFunc {
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.CNO != ReqBody.CNO && DataCust.KDCAB != ReqBody.KDCAB {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
 		}
 
 		var Anggota obj.MSTCST
 		if err := AppTx.Main.Debug().Table("MSTCST").Select("*").Where("kdcab = ? and cno = ?", ReqBody.KDCAB, ReqBody.CNO).Scan(&Anggota).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		DaftarRekening := make([]obj.SHDBLC, 0)
 		if err := AppTx.Main.Debug().Table("SHDBLC").Select("*").Where("cno = ?", ReqBody.CNO).Scan(&DaftarRekening).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
 		}
 
 		// hapus data pin dari Anggota

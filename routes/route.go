@@ -51,6 +51,12 @@ func AnggotaRoute(routerEngine *gin.Engine) {
 		// pendaftaranGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
 	}
 
+	updateKtp := routerEngine.Group("/anggota")
+	updateKtp.Use(auth.JwtAuth(), auth.TimestampAuth(), auth.JwtAuth())
+	{
+		updateKtp.POST("/fotoktp", controller.UploadFotoKtp())
+	}
+
 	anggotaGroup := routerEngine.Group("/anggota")
 	anggotaGroup.Use(auth.RequestIdAuth(), auth.TimestampAuth(), auth.JwtAuth(), auth.SignatureAuth())
 	{
@@ -59,6 +65,9 @@ func AnggotaRoute(routerEngine *gin.Engine) {
 
 		// refresh session anggota
 		anggotaGroup.POST("/refreshsession", controller.RefreshSessionAnggota())
+
+		// logout session anggota
+		anggotaGroup.POST("/logout", controller.LogoutAnggota())
 
 		/* NOT USED : API LANGSUNG DICONSUME OLEH END-USER */
 		// // get daftar anggota
