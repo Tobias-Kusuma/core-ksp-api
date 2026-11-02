@@ -61,6 +61,21 @@ type ReqAnggotaBaru struct {
 	SIMPANAN_SUKARELA ReqBukaSimpanan      `json:"simpanan_sukarela"`
 }
 
+type ReqAkunMobileBaru struct {
+	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
+	CNO   string `json:"cno" gorm:"column:cno"`     // mandatory
+	CNM   string `json:"cnm" gorm:"column:cnm"`     // mandatory
+	NOID  string `json:"NoID" gorm:"column:NoID"`   // mandatory
+	NOHP  string `json:"nohp" gorm:"column:nohp"`   // mandatory
+	EMAIL string `json:"email" gorm:"column:email"` // mandatory
+
+	// untuk update data
+	PASAR string `json:"pasar" gorm:"column:pasar"`
+
+	// kebutuhan login aplikasi mobile koperasi
+	PIN string `json:"pin" gorm:"pin"`
+}
+
 type ReqDaftarAnggota struct {
 	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
 }
@@ -191,6 +206,7 @@ type ReqRiwayatBayar struct {
 type ReqLoginAnggota struct {
 	KDCAB string `json:"kdcab"`
 	CNO   string `json:"cno"`
+	NOHP  string `json:"nohp"`
 	PIN   string `json:"pin"`
 }
 
