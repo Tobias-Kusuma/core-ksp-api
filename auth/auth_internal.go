@@ -21,12 +21,17 @@ import (
 
 // authentication session internal
 var (
-	jwtKey     []byte
-	signSecret []byte
+	jwtKey           []byte
+	signSecret       []byte
+	PrefixSessionKey string = "SID-"
 )
 
 // generate access token
-func GenerateAccessToken( /*deviceid string, phone string, userid string,*/ kdcab string, cno string, cnm string) (string, error) {
+func GenerateAccessToken( /*deviceid string, phone string, userid string,*/ kdcab string, cno string, cnm string, sessionId string) (string, error) {
+	if sessionId == "" {
+		return "", errors.New("Session ID tidak boleh kosong")
+	}
+
 	claims := obj.CustomClaims{
 		// DEVICEID:  deviceid,
 		// NOHP:      phone,
@@ -35,6 +40,7 @@ func GenerateAccessToken( /*deviceid string, phone string, userid string,*/ kdca
 		CNO:       cno,
 		CNM:       cnm,
 		TOKENTYPE: "access",
+		SESSIONID: sessionId,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * 7 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -50,7 +56,11 @@ func GenerateAccessToken( /*deviceid string, phone string, userid string,*/ kdca
 }
 
 // generate access token
-func GenerateRefreshToken( /*deviceid string, phone string, userid string,*/ kdcab string, cno string, cnm string) (string, error) {
+func GenerateRefreshToken( /*deviceid string, phone string, userid string,*/ kdcab string, cno string, cnm string, sessionId string) (string, error) {
+	if sessionId == "" {
+		return "", errors.New("Session ID tidak boleh kosong")
+	}
+
 	claims := obj.CustomClaims{
 		// DEVICEID:  deviceid,
 		// NOHP:      phone,
@@ -59,6 +69,7 @@ func GenerateRefreshToken( /*deviceid string, phone string, userid string,*/ kdc
 		CNO:       cno,
 		CNM:       cnm,
 		TOKENTYPE: "refresh",
+		SESSIONID: sessionId,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * 21 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -102,6 +113,10 @@ func ValidateToken(tokenStr string) (*obj.CustomClaims, error) {
 	claims, ok := token.Claims.(*obj.CustomClaims)
 	if !ok || !token.Valid {
 		return nil, errors.New("invalid token")
+	}
+
+	if claims.SESSIONID == "" {
+		return nil, errors.New("Session ID tidak boleh kosong")
 	}
 
 	return claims, nil
@@ -154,14 +169,32 @@ func JwtAuth() gin.HandlerFunc {
 			return
 		}
 
+		// cek apakah claims.SESSIONID masih ada di redis
+		keySessionId := PrefixSessionKey + claims.SESSIONID
+		_, isFound, err := cache.RedisGet[string](keySessionId)
+
+		if err != nil {
+			log.Printf("ERROR: %s", err)
+			helper.RespondErrorUnauthorized(c, fmt.Errorf("Session sudah tidak valid!"))
+			return
+		}
+
+		if isFound == false {
+			err := fmt.Errorf("Session sudah tidak valid!")
+			log.Printf("ERROR: %s", err)
+			helper.RespondErrorUnauthorized(c, err)
+			return
+		}
+
 		// simpan data user ke context biar bisa dipakai handler berikutnya
 		user := &obj.DetailCust{
 			// DEVICEID: claims.DEVICEID,
 			// NOHP:     claims.NOHP,
 			// ID:       claims.ID,
-			KDCAB: claims.KDCAB,
-			CNO:   claims.CNO,
-			CNM:   claims.CNM,
+			KDCAB:     claims.KDCAB,
+			CNO:       claims.CNO,
+			CNM:       claims.CNM,
+			SESSIONID: claims.SESSIONID,
 		}
 
 		c.Set("token-string", tokenStr) // digunakan untuk verifikasi signature

@@ -43,6 +43,7 @@ type CustomClaims struct {
 	CNO       string `json:"cno"`
 	CNM       string `json:"cnm"`
 	TOKENTYPE string `json:"token_type"`
+	SESSIONID string `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
@@ -50,7 +51,8 @@ type DetailCust struct {
 	// DEVICEID string `json:"deviceid" gorm:"column:deviceid"`
 	// NOHP     string `json:"nohp" gorm:"column:nohp"`
 	// ID       string `json:"id" gorm:"column:id"`
-	KDCAB string `json:"kdcab" gorm:"column:kdcab"`
-	CNO   string `json:"cno" gorm:"column:cno"`
-	CNM   string `json:"cnm" gorm:"column:cnm"`
+	KDCAB     string `json:"kdcab" gorm:"column:kdcab"`
+	CNO       string `json:"cno" gorm:"column:cno"`
+	CNM       string `json:"cnm" gorm:"column:cnm"`
+	SESSIONID string `json:"session_id" gorm:"-"`
 }

@@ -215,3 +215,8 @@ type ReqRefreshSessionAnggota struct {
 	CNO           string `json:"cno"`
 	REFRESH_TOKEN string `json:"refresh_token"`
 }
+
+type ReqLogoutAnggota struct {
+	KDCAB string `json:"kdcab"`
+	CNO   string `json:"cno"`
+}

@@ -4,6 +4,7 @@ Backend API berbasis Go, Gin, GORM, dan SQL Server. Repository saat ini menyedia
 
 ## Dokumentasi
 
+- [Authentication dan authorization untuk integrasi pihak ketiga](docs/integrasi-authentication-authorization.md)
 - [Menjalankan aplikasi dan Docker](docs/menjalankan-aplikasi.md)
 - [Membuat controller baru](docs/membuat-controller-baru.md)
 - [Get_DB_ReqBody dan database](docs/get-db-reqbody-database.md)
