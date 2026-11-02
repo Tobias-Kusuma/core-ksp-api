@@ -37,15 +37,18 @@ func DefaultRoutes(routerEngine *gin.Engine) {
 		})
 
 		// login anggota
-		defaultGroup.POST("/loginanggota", controller.LoginAnggota())
+		defaultGroup.POST("/anggota/login", controller.LoginAnggota())
 	}
 }
 
 func AnggotaRoute(routerEngine *gin.Engine) {
 	pendaftaranGroup := routerEngine.Group("/anggota")
 	{
-		// pendaftaran anggota
-		pendaftaranGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
+		pendaftaranGroup.POST("/openmobileaccount", controller.CreateAkunMobileAnggota())
+
+		/* NOT USED : API LANGSUNG DICONSUME OLEH END-USER */
+		// // pendaftaran anggota
+		// pendaftaranGroup.POST("/pendaftaran", controller.DaftarAnggotaBaru())
 	}
 
 	anggotaGroup := routerEngine.Group("/anggota")
