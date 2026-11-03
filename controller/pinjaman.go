@@ -54,300 +54,6 @@ func GetProdukPinjaman() gin.HandlerFunc {
 	}
 }
 
-func PinjamanBaru() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ReqBody obj.ReqPinjamanBaru
-		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
-		if err != nil {
-			log.Printf("ERROR: %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-			return
-		}
-
-		Kdcab := strings.TrimSpace(ReqBody.KDCAB)
-		Cno := strings.TrimSpace(ReqBody.CNO)
-		Jenis := strings.TrimSpace(ReqBody.JENIS)
-
-		if Kdcab == "" || Cno == "" || Jenis == "" {
-			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter kdcab, cno, dan jenis wajib diisi"))
-			return
-		}
-
-		if ReqBody.PLF_DEBITUR <= 0 {
-			helper.RespondMaskedError(c, true, fmt.Errorf("Nilai plafon pinjaman (plf_debitur) harus lebih dari 0"))
-			return
-		}
-
-		if ReqBody.JK_WKTAWAL <= 0 {
-			helper.RespondMaskedError(c, true, fmt.Errorf("Jangka waktu pinjaman (jk_wktawal) harus lebih dari 0 bulan"))
-			return
-		}
-
-		// 1. Verifikasi keberadaan anggota di MSTCST
-		var member struct {
-			KDCAB string  `gorm:"column:kdcab"`
-			CNO   string  `gorm:"column:cno"`
-			CNM   *string `gorm:"column:cnm"`
-		}
-		if err := AppTx.Main.Debug().Table("MSTCST").
-			Select("kdcab, cno, cnm").
-			Where("kdcab = ? and cno = ?", Kdcab, Cno).
-			First(&member).Error; err != nil {
-			log.Printf("ERROR: Data anggota tidak ditemukan: %s", err.Error())
-			helper.RespondMaskedError(c, true, fmt.Errorf("Data anggota tidak ditemukan"))
-			return
-		}
-
-		NamaAnggota := ""
-		if member.CNM != nil {
-			NamaAnggota = strings.TrimSpace(*member.CNM)
-		}
-
-		// 2. Verifikasi produk pinjaman di PRODUK
-		var produk obj.PRODUK
-		if err := AppTx.Main.Debug().Table("PRODUK").
-			Where("rtrim(kd_produk) = ?", Jenis).
-			First(&produk).Error; err != nil {
-			log.Printf("ERROR: Produk pinjaman tidak ditemukan: %s", err.Error())
-			helper.RespondMaskedError(c, true, fmt.Errorf("Produk pinjaman tidak ditemukan"))
-			return
-		}
-
-		NmProduk := ""
-		if produk.NMPRODUK != nil {
-			NmProduk = strings.TrimSpace(*produk.NMPRODUK)
-		}
-
-		// 3. Tentukan parameter suku bunga, rumus bunga, jenis angsuran, jenis kredit
-		Bunga := ReqBody.BUNGA
-		if Bunga <= 0 && produk.BASERATE != nil {
-			Bunga = *produk.BASERATE
-		}
-
-		RmsBunga := helper.NormalizeRmsBunga(ReqBody.RMSBUNGA)
-		if ReqBody.RMSBUNGA == "" && produk.RMSBUNGA != nil {
-			RmsBunga = helper.NormalizeRmsBunga(*produk.RMSBUNGA)
-		}
-
-		JnsAngsur := helper.NormalizeJnsAngsur(ReqBody.JNSANGSUR)
-		if ReqBody.JNSANGSUR == "" && produk.JNSANG != nil {
-			JnsAngsur = helper.NormalizeJnsAngsur(*produk.JNSANG)
-		}
-
-		JnsKredit := strings.TrimSpace(ReqBody.JNSKREDIT)
-		if JnsKredit == "" {
-			JnsKredit = "1" // Default: 1 = Pinjaman Baru
-		}
-
-		// 4. Tanggal pencairan (tgl_awal) dan penentuan jatuh tempo (jt_tempo)
-		tglAwal, err := helper.ParseDateFlexible(ReqBody.TGL_AWAL)
-		if err != nil {
-			helper.RespondMaskedError(c, true, err)
-			return
-		}
-
-		tglAngsur := ReqBody.TGLANGSUR
-		if tglAngsur <= 0 || tglAngsur > 31 {
-			tglAngsur = tglAwal.Day()
-		}
-
-		tenor := int(ReqBody.JK_WKTAWAL)
-		jtTempo := helper.CalculateInstallmentDate(tglAwal, tenor, tglAngsur)
-
-		// 5. Generate jadwal angsuran berdasarkan rumus bunga dan jenis angsuran
-		schedule, angsurDeb, angsPokok, angsBunga, totBng := helper.GenerateLoanSchedule(
-			ReqBody.PLF_DEBITUR,
-			tenor,
-			Bunga,
-			RmsBunga,
-			JnsAngsur,
-			tglAwal,
-			tglAngsur,
-		)
-
-		tglAngs := schedule[0].TglVal
-
-		// Biaya provisi dan administrasi
-		Provisi := ReqBody.PROVISI
-		Adm := ReqBody.ADM
-		TotalBiaya := Provisi + Adm
-
-		// 6. Jalankan transaksi database untuk insert KRD100 dan seluruh jadwal KRDANGS
-		trx := AppTx.Main.Begin()
-		defer func() {
-			if r := recover(); r != nil {
-				trx.Rollback()
-			}
-		}()
-
-		// Generate nomor fasilitas pinjaman baru (nofas)
-		// Format: kdcab (3) + jenis (2) + nomor urut dipadding 5 digit: %05d
-		var lastUrut int64
-		if err := trx.Table("KRD100").
-			Select("isnull(max(try_cast(right(nofas, 5) as bigint)), 0) as last_urut").
-			Where("kdcab = ? and Jenis = ?", Kdcab, Jenis).
-			Scan(&lastUrut).Error; err != nil {
-			trx.Rollback()
-			log.Printf("ERROR: Gagal membuat nomor fasilitas pinjaman: %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-			return
-		}
-
-		Nofas := fmt.Sprintf("%s%s%05d", Kdcab, Jenis, lastUrut+1)
-
-		tglNow := time.Now()
-		nol := 0.0
-		usrInput := "Via API"
-		tglAngsurF := float64(tglAngsur)
-		tenorF := float64(tenor)
-		bcadHariAwal := helper.Round2(angsBunga / 30.0)
-
-		kodeAO := strings.TrimSpace(ReqBody.KODEAO)
-		if kodeAO == "" {
-			kodeAO = "0000"
-		}
-
-		// 7. Simpan master pinjaman ke tabel KRD100
-		newKrd100 := obj.KRD100{
-			KDCAB:      Kdcab,
-			CNO:        Cno,
-			NOFAS:      Nofas,
-			JENIS:      &Jenis,
-			JNSANGSUR:  &JnsAngsur,
-			JNSKREDIT:  &JnsKredit,
-			PLFDEBITUR: &ReqBody.PLF_DEBITUR,
-			JKWKTAWAL:  &tenorF,
-			BUNGA:      &Bunga,
-			TGLAWAL:    &tglAwal,
-			JTTEMPO:    &jtTempo,
-			TGLANGS:    &tglAngs,
-			TGLACCRUE:  &tglAwal,
-			FLAGBAYAR:  helper.StringPtr("0"),
-			TGLANGSUR:  &tglAngsurF,
-			NLDENDA:    &nol,
-			RMSBUNGA:   &RmsBunga,
-			SLDAKHIR:   &ReqBody.PLF_DEBITUR,
-			ANGSURDEB:  &angsurDeb,
-			TOTBNG:     &totBng,
-			CADHARI:    &nol,
-			BCADHARI:   &bcadHariAwal,
-			BCADANG:    &nol,
-			BJMLHARI:   &nol,
-			PROVISI:    &Provisi,
-			ADM:        &Adm,
-			TOTALBIAYA: &TotalBiaya,
-			ANGSPOKOK:  &angsPokok,
-			ANGSBUNGA:  &angsBunga,
-			NLPPAP:     &nol,
-			NOAC:       helper.StringPtr(strings.TrimSpace(ReqBody.NOAC)),
-			KODEAO:     &kodeAO,
-			KOLEK:      helper.StringPtr("1"),
-			NLJAMINAN:  &ReqBody.NLJAMINAN,
-			NOREF:      helper.StringPtr(strings.TrimSpace(ReqBody.NOREF)),
-			SALDOOLD:   &nol,
-			BACKKET:    helper.StringPtr(strings.TrimSpace(ReqBody.KETERANGAN)),
-			STSKRD:     helper.StringPtr("OK"),
-			STSDEB:     helper.StringPtr("01"),
-			STATUS:     helper.StringPtr("1"),
-			USRID:      &usrInput,
-			DUPD:       &tglNow,
-			OTR:        &usrInput,
-			DOTR:       &tglNow,
-		}
-
-		if err := trx.Table("KRD100").Create(&newKrd100).Error; err != nil {
-			trx.Rollback()
-			log.Printf("ERROR: Gagal menyimpan data pinjaman (KRD100): %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-			return
-		}
-
-		// 8. Simpan jadwal angsuran ke tabel KRDANGS
-		resJadwal := make([]obj.ResJadwalAngsuran, len(schedule))
-		krdangsList := make([]obj.KRDANGS, len(schedule))
-
-		for i, s := range schedule {
-			angsurKeF := float64(s.AngsurKe)
-			pokokVal := s.PokokJdw
-			bungaVal := s.BungaJdw
-			osdebVal := s.OsdebJdw
-			bcadVal := s.BcadHari
-
-			krdangsList[i] = obj.KRDANGS{
-				KDCAB:     Kdcab,
-				NOFAS:     Nofas,
-				ANGSURKE:  angsurKeF,
-				TGLVAL:    s.TglVal,
-				POKOKJDW:  &pokokVal,
-				BUNGAJDW:  &bungaVal,
-				OSDEBJDW:  &osdebVal,
-				NLPOKOK:   &pokokVal,
-				NLBUNGA:   &bungaVal,
-				NLDENDA:   &nol,
-				NLSALDO:   &nol,
-				BNGHARI:   &nol,
-				BCADHARI:  &bcadVal,
-				FLAGBAYAR: helper.StringPtr("0"),
-				STATUS:    helper.StringPtr("1"),
-				USRID:     &usrInput,
-				DUPD:      &tglNow,
-				OTR:       &usrInput,
-				DOTR:      &tglNow,
-			}
-
-			resJadwal[i] = obj.ResJadwalAngsuran{
-				ANGSURKE: angsurKeF,
-				TGLVAL:   s.TglVal.Format(helper.DateFormat),
-				POKOKJDW: s.PokokJdw,
-				BUNGAJDW: s.BungaJdw,
-				TOTAL:    s.Total,
-				OSDEBJDW: s.OsdebJdw,
-			}
-		}
-
-		if err := trx.Table("KRDANGS").Create(&krdangsList).Error; err != nil {
-			trx.Rollback()
-			log.Printf("ERROR: Gagal membuat jadwal angsuran (KRDANGS): %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-			return
-		}
-
-		if err := trx.Commit().Error; err != nil {
-			log.Printf("ERROR: Gagal commit transaksi pinjaman: %s", err.Error())
-			helper.RespondMaskedError(c, false, err)
-			return
-		}
-
-		// 9. Format response sukses
-		resData := obj.ResPinjamanBaru{
-			KDCAB:       Kdcab,
-			CNO:         Cno,
-			NOFAS:       Nofas,
-			NAMA:        NamaAnggota,
-			JENIS:       Jenis,
-			NM_PRODUK:   NmProduk,
-			PLF_DEBITUR: ReqBody.PLF_DEBITUR,
-			JK_WKTAWAL:  ReqBody.JK_WKTAWAL,
-			BUNGA:       Bunga,
-			RMSBUNGA:    RmsBunga,
-			JNSANGSUR:   JnsAngsur,
-			TGL_AWAL:    tglAwal.Format(helper.DateFormat),
-			JT_TEMPO:    jtTempo.Format(helper.DateFormat),
-			TGLANGS:     tglAngs.Format(helper.DateFormat),
-			ANGSUR_DEB:  angsurDeb,
-			ANGSPOKOK:   angsPokok,
-			ANGSBUNGA:   angsBunga,
-			TOTBNG:      totBng,
-			PROVISI:     Provisi,
-			ADM:         Adm,
-			TOTAL_BIAYA: TotalBiaya,
-			JADWAL:      resJadwal,
-		}
-
-		helper.RespondMaskedOk(c, "Berhasil membuat pinjaman baru", resData)
-	}
-}
-
 func GetJadwalAngsuran() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ReqBody obj.ReqGetJadwalAngsuran
@@ -363,6 +69,30 @@ func GetJadwalAngsuran() gin.HandlerFunc {
 
 		if Kdcab == "" || Nofas == "" {
 			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter kdcab dan nofas wajib diisi"))
+			return
+		}
+
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// verifikasi fasilitas pinjaman milik nasabah
+		var countFas int64
+		if err := AppTx.Main.Debug().Table("KRD100").
+			Where("kdcab = ? and nofas = ? and cno = ?", Kdcab, Nofas, DataCust.CNO).
+			Count(&countFas).Error; err != nil || countFas == 0 {
+			helper.RespondMaskedError(c, true, fmt.Errorf("Fasilitas pinjaman tidak ditemukan"))
 			return
 		}
 
@@ -395,6 +125,21 @@ func GetDaftarPinjaman() gin.HandlerFunc {
 
 		if Cno == "" {
 			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter cno wajib diisi"))
+			return
+		}
+
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.CNO != Cno || (Kdcab != "" && DataCust.KDCAB != Kdcab) {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
 			return
 		}
 
@@ -453,6 +198,21 @@ func GetDataPinjaman() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if Kdcab != "" && DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
 		querySelect := `
 			KRD100.kdcab,
 			KRD100.cno,
@@ -502,7 +262,7 @@ func GetDataPinjaman() gin.HandlerFunc {
 			Select(querySelect).
 			Joins("LEFT JOIN MSTCST ON KRD100.cno = MSTCST.cno").
 			Joins("LEFT JOIN PRODUK ON rtrim(KRD100.Jenis) = rtrim(PRODUK.kd_produk)").
-			Where("KRD100.nofas = ?", Nofas)
+			Where("KRD100.nofas = ? and KRD100.cno = ?", Nofas, DataCust.CNO)
 
 		if Kdcab != "" {
 			query = query.Where("KRD100.kdcab = ?", Kdcab)
@@ -1548,6 +1308,32 @@ func GetRiwayatBayar() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if Kdcab != "" && DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
+		// verifikasi fasilitas pinjaman milik nasabah
+		var countFas int64
+		qCheck := AppTx.Main.Debug().Table("KRD100").Where("nofas = ? and cno = ?", Nofas, DataCust.CNO)
+		if Kdcab != "" {
+			qCheck = qCheck.Where("kdcab = ?", Kdcab)
+		}
+		if err := qCheck.Count(&countFas).Error; err != nil || countFas == 0 {
+			helper.RespondMaskedError(c, true, fmt.Errorf("Fasilitas pinjaman tidak ditemukan"))
+			return
+		}
+
 		type queryRow struct {
 			NOREF     string    `gorm:"column:noref"`
 			TGLTRN    time.Time `gorm:"column:tgltrn"`
@@ -1616,4 +1402,3 @@ func GetRiwayatBayar() gin.HandlerFunc {
 		helper.RespondMaskedOk(c, "Berhasil mendapatkan riwayat pembayaran pinjaman", resData)
 	}
 }
-

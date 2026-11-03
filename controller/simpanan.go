@@ -61,7 +61,7 @@ func GetProdukSimpanan() gin.HandlerFunc {
 	}
 }
 
-func NewSimpanan() gin.HandlerFunc {
+func SimpananBaru() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ReqBody obj.ReqBukaSimpanan
 		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
@@ -77,6 +77,21 @@ func NewSimpanan() gin.HandlerFunc {
 
 		if Kdcab == "" || Cno == "" || Jenis == "" {
 			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter kdcab, cno, dan jenis wajib diisi"))
+			return
+		}
+
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.CNO != Cno || DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
 			return
 		}
 
@@ -166,7 +181,7 @@ func NewSimpanan() gin.HandlerFunc {
 			TGLAWAL:  &TglNow,
 			AUTODB:   helper.StringPtr("N"),
 			KODEAO:   helper.StringPtr("0000"),
-			STATUS:   helper.StringPtr("1"),
+			STATUS:   helper.StringPtr("0"),
 		}
 
 		if err := AppTx.Main.Debug().Table("SHDBLC").Create(&newSimpanan).Error; err != nil {
@@ -180,8 +195,12 @@ func NewSimpanan() gin.HandlerFunc {
 			NOAC: Noac,
 		}
 
-		helper.RespondMaskedOk(c, "Berhasil membuka rekening simpanan baru", ResData)
+		helper.RespondMaskedOk(c, "Rekening Simpan berhasil dibuat, silahkan lakukan setoran awal ke kasir untuk mengaktivasi rekening tabungan", ResData)
 	}
+}
+
+func NewSimpanan() gin.HandlerFunc {
+	return SimpananBaru()
 }
 
 func SetorSimpanan() gin.HandlerFunc {
@@ -202,9 +221,24 @@ func SetorSimpanan() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
 		var rekening obj.SHDBLC
 		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("kdcab = ? and noac = ? and status = ?", Kdcab, Noac, "1").
+			Where("kdcab = ? and noac = ? and cno = ? and status = ?", Kdcab, Noac, DataCust.CNO, "1").
 			First(&rekening).Error; err != nil {
 			log.Printf("ERROR: Rekening tidak ditemukan atau tidak aktif: %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Rekening tidak ditemukan atau tidak aktif"))
@@ -218,7 +252,7 @@ func SetorSimpanan() gin.HandlerFunc {
 		newSldAkhir := sldAkhir + ReqBody.NOMINAL
 
 		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("kdcab = ? and noac = ?", Kdcab, Noac).
+			Where("kdcab = ? and noac = ? and cno = ?", Kdcab, Noac, DataCust.CNO).
 			Updates(map[string]interface{}{
 				"sldakhir": newSldAkhir,
 				"sldpakai": newSldAkhir,
@@ -265,9 +299,24 @@ func TarikSimpanan() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
 		var rekening obj.SHDBLC
 		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("kdcab = ? and noac = ? and status = ?", Kdcab, Noac, "1").
+			Where("kdcab = ? and noac = ? and cno = ? and status = ?", Kdcab, Noac, DataCust.CNO, "1").
 			First(&rekening).Error; err != nil {
 			log.Printf("ERROR: Rekening tidak ditemukan atau tidak aktif: %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Rekening tidak ditemukan atau tidak aktif"))
@@ -292,7 +341,7 @@ func TarikSimpanan() gin.HandlerFunc {
 		newSldAkhir := sldPakai - ReqBody.NOMINAL
 
 		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("kdcab = ? and noac = ?", Kdcab, Noac).
+			Where("kdcab = ? and noac = ? and cno = ?", Kdcab, Noac, DataCust.CNO).
 			Updates(map[string]interface{}{
 				"sldakhir": newSldAkhir,
 				"sldpakai": newSldAkhir,
@@ -344,9 +393,17 @@ func TransferSimpanan() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
 		var rekAsal obj.SHDBLC
 		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("noac = ? and status = ?", NoacAsal, "1").
+			Where("noac = ? and cno = ? and status = ?", NoacAsal, DataCust.CNO, "1").
 			First(&rekAsal).Error; err != nil {
 			log.Printf("ERROR: Rekening asal tidak ditemukan atau tidak aktif: %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Rekening asal tidak ditemukan atau tidak aktif"))
@@ -440,7 +497,7 @@ func TransferSimpanan() gin.HandlerFunc {
 func GetMutasi() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ReqBody obj.ReqGetMutasi
-		_, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
 		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
@@ -450,6 +507,24 @@ func GetMutasi() gin.HandlerFunc {
 		Noac := strings.TrimSpace(ReqBody.NOAC)
 		if Noac == "" {
 			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter noac wajib diisi"))
+			return
+		}
+
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		// validasi kepemilikan rekening
+		var rekening obj.SHDBLC
+		if err := AppTx.Main.Debug().Table("SHDBLC").
+			Where("noac = ? and cno = ?", Noac, DataCust.CNO).
+			First(&rekening).Error; err != nil {
+			log.Printf("ERROR: Rekening tidak ditemukan: %s", err.Error())
+			helper.RespondMaskedError(c, true, fmt.Errorf("Rekening tidak ditemukan"))
 			return
 		}
 
@@ -473,6 +548,21 @@ func GetDaftarRekening() gin.HandlerFunc {
 
 		if Kdcab == "" || Cno == "" {
 			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter kdcab dan cno wajib diisi"))
+			return
+		}
+
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.CNO != Cno || DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
 			return
 		}
 
@@ -508,11 +598,26 @@ func GetDataRekening() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
 		var resRekening obj.ResDataRekening
 		if err := AppTx.Main.Debug().Table("SHDBLC").
 			Select("SHDBLC.*, rtrim(RET500.nmproduk) as nmproduk, rtrim(RET500.jnsprd) as jnsprd, rtrim(RET500.jnstipe) as jnstipe").
 			Joins("LEFT JOIN RET500 ON SHDBLC.jenis = RET500.jenis").
-			Where("SHDBLC.kdcab = ? and SHDBLC.noac = ?", Kdcab, Noac).
+			Where("SHDBLC.kdcab = ? and SHDBLC.noac = ? and SHDBLC.cno = ?", Kdcab, Noac, DataCust.CNO).
 			First(&resRekening).Error; err != nil {
 			log.Printf("ERROR: Data rekening tidak ditemukan: %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Data rekening tidak ditemukan"))
@@ -541,9 +646,24 @@ func TutupRekening() gin.HandlerFunc {
 			return
 		}
 
+		// ambil data nasabah dari token
+		DataCust, err := helper.GetDetailCust(c)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if DataCust.KDCAB != Kdcab {
+			err := fmt.Errorf("Identitas tidak dapat dipastikan")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
+			return
+		}
+
 		var rekening obj.SHDBLC
 		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("kdcab = ? and noac = ? and status = ?", Kdcab, Noac, "1").
+			Where("kdcab = ? and noac = ? and cno = ? and status = ?", Kdcab, Noac, DataCust.CNO, "1").
 			First(&rekening).Error; err != nil {
 			log.Printf("ERROR: Rekening tidak ditemukan atau sudah ditutup: %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Rekening tidak ditemukan atau sudah ditutup"))

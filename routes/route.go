@@ -76,23 +76,28 @@ func AnggotaRoute(routerEngine *gin.Engine) {
 }
 
 func SimpananRoute(routerEngine *gin.Engine) {
-	// terbuka untuk publik tanpa authentication dan authorization
-	simpananGroup := routerEngine.Group("/simpanan")
+	// endpoint publik tanpa autentikasi (katalog produk)
+	publicSimpanan := routerEngine.Group("/simpanan")
 	{
 		// get produk simpanan
-		simpananGroup.POST("/getproduksimpanan", controller.GetProdukSimpanan())
+		publicSimpanan.POST("/getproduksimpanan", controller.GetProdukSimpanan())
+	}
 
+	// endpoint terproteksi level 3 (otentikasi user, timestamp, request id, dan signature)
+	simpananGroup := routerEngine.Group("/simpanan")
+	simpananGroup.Use(auth.RequestIdAuth(), auth.TimestampAuth(), auth.JwtAuth(), auth.SignatureAuth())
+	{
 		// pembukaan rekening simpanan
-		simpananGroup.POST("/newsimpanan", controller.NewSimpanan())
+		simpananGroup.POST("/simpanbaru", controller.SimpananBaru())
 
-		// setor simpanan
-		simpananGroup.POST("/setorsimpanan", controller.SetorSimpanan())
+		// // setor simpanan
+		// simpananGroup.POST("/setorsimpanan", controller.SetorSimpanan())
 
-		// tarik simpanan
-		simpananGroup.POST("/tariksimpanan", controller.TarikSimpanan())
+		// // tarik simpanan
+		// simpananGroup.POST("/tariksimpanan", controller.TarikSimpanan())
 
-		// transfer simpanan
-		simpananGroup.POST("/transfersimpanan", controller.TransferSimpanan())
+		// // transfer simpanan
+		// simpananGroup.POST("/transfersimpanan", controller.TransferSimpanan())
 
 		// get mutasi simpanan
 		simpananGroup.POST("/getmutasi", controller.GetMutasi())
@@ -109,16 +114,25 @@ func SimpananRoute(routerEngine *gin.Engine) {
 }
 
 func PinjamanRoute(routerEngine *gin.Engine) {
-	pinjamanGroup := routerEngine.Group("/pinjaman")
+	// endpoint publik tanpa autentikasi (katalog produk & simulasi)
+	publicPinjaman := routerEngine.Group("/pinjaman")
 	{
 		// get daftar produk pinjaman
-		pinjamanGroup.POST("/getprodukpinjaman", controller.GetProdukPinjaman())
+		publicPinjaman.POST("/getprodukpinjaman", controller.GetProdukPinjaman())
 
-		// pinjaman baru
-		pinjamanGroup.POST("/pinjamanbaru", controller.PinjamanBaru())
+		// simulasi pinjaman / kalkulator kredit
+		publicPinjaman.POST("/simulasi", controller.SimulasiPinjaman())
+	}
 
-		// get jadwal angsuran
+	// endpoint terproteksi level 3 (otentikasi user, timestamp, request id, dan signature)
+	pinjamanGroup := routerEngine.Group("/pinjaman")
+	pinjamanGroup.Use(auth.RequestIdAuth(), auth.TimestampAuth(), auth.JwtAuth(), auth.SignatureAuth())
+	{
+		// get jadwal angsuran (payment schedule)
 		pinjamanGroup.POST("/getjadwalangsuran", controller.GetJadwalAngsuran())
+
+		// get riwayat pembayaran angsuran & pelunasan
+		pinjamanGroup.POST("/getriwayatbayar", controller.GetRiwayatBayar())
 
 		// get daftar pinjaman nasabah
 		pinjamanGroup.POST("/getdaftarpinjaman", controller.GetDaftarPinjaman())
@@ -126,19 +140,14 @@ func PinjamanRoute(routerEngine *gin.Engine) {
 		// get data detail pinjaman
 		pinjamanGroup.POST("/getdatapinjaman", controller.GetDataPinjaman())
 
-		// get tagihan angsuran berjalan & denda
-		pinjamanGroup.POST("/gettagihan", controller.GetTagihan())
-
-		// simulasi pinjaman / kalkulator kredit
-		pinjamanGroup.POST("/simulasi", controller.SimulasiPinjaman())
-
-		// pembayaran cicilan / angsuran pinjaman
-		pinjamanGroup.POST("/bayarangsuran", controller.BayarAngsuran())
-
-		// pelunasan pinjaman dipercepat
-		pinjamanGroup.POST("/pelunasankredit", controller.PelunasanKredit())
-
-		// get riwayat pembayaran angsuran & pelunasan
-		pinjamanGroup.POST("/getriwayatbayar", controller.GetRiwayatBayar())
+		/* NOT USED / TIDAK BISA VIA APPS : Pengajuan & transaksi pembayaran pinjaman dilakukan via kasir */
+		// // pinjaman baru (pengajuan pinjaman via apps dinonaktifkan)
+		// pinjamanGroup.POST("/pinjamanbaru", ...)
+		// // get tagihan angsuran berjalan & denda
+		// pinjamanGroup.POST("/gettagihan", controller.GetTagihan())
+		// // pembayaran cicilan / angsuran pinjaman
+		// pinjamanGroup.POST("/bayarangsuran", controller.BayarAngsuran())
+		// // pelunasan pinjaman dipercepat
+		// pinjamanGroup.POST("/pelunasankredit", controller.PelunasanKredit())
 	}
 }
