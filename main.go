@@ -52,6 +52,8 @@ func main() {
 	// routes yang dipakai
 	routes.DefaultRoutes(router)
 	routes.AnggotaRoute(router)
+	routes.SimpananRoute(router)
+	routes.PinjamanRoute(router)
 
 	log.Printf("%s\n", "✅ API Apps starting ...")
 	log.Printf("%s\n", "✅ All database connections have been successfully initialized")
