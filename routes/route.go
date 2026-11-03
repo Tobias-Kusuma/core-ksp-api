@@ -52,7 +52,7 @@ func AnggotaRoute(routerEngine *gin.Engine) {
 	}
 
 	updateKtp := routerEngine.Group("/anggota")
-	updateKtp.Use(auth.JwtAuth(), auth.TimestampAuth(), auth.JwtAuth())
+	updateKtp.Use(auth.JwtAuth(), auth.TimestampAuth())
 	{
 		updateKtp.POST("/fotoktp", controller.UploadFotoKtp())
 	}
