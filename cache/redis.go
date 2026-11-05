@@ -3,6 +3,9 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -10,11 +13,66 @@ import (
 
 var Ctx_bg = context.Background()
 
-var Redis = redis.NewClient(&redis.Options{
-	Addr:     "redis:6379",
-	Password: "",
-	DB:       0,
-})
+var Redis *redis.Client
+
+func init() {
+	InitRedisClient()
+}
+
+// InitRedisClient menginisialisasi atau memperbarui client Redis berdasarkan environment variables
+func InitRedisClient() {
+	addr := os.Getenv("REDIS_ADDR")
+	if addr == "" {
+		host := os.Getenv("REDIS_HOST")
+		if host == "" {
+			host = "redis"
+		}
+
+		port := os.Getenv("REDIS_PORT")
+		if port == "" {
+			port = "6379"
+		}
+
+		addr = fmt.Sprintf("%s:%s", host, port)
+	}
+
+	password := os.Getenv("REDIS_PASSWORD")
+
+	dbNum := 0
+	if dbEnv := os.Getenv("REDIS_DB"); dbEnv != "" {
+		if val, err := strconv.Atoi(dbEnv); err == nil {
+			dbNum = val
+		}
+	}
+
+	if Redis != nil {
+		_ = Redis.Close()
+	}
+
+	Redis = redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: password,
+		DB:       dbNum,
+	})
+}
+
+// PingRedis mengecek koneksi ke Redis dengan batas waktu timeout
+func PingRedis(timeout time.Duration) error {
+	if Redis == nil {
+		InitRedisClient()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return Redis.Ping(ctx).Err()
+}
+
+// CloseRedis menutup koneksi client Redis
+func CloseRedis() error {
+	if Redis != nil {
+		return Redis.Close()
+	}
+	return nil
+}
 
 // set item ke cache;
 // input parms key, lalu instance of struct/map sebagai value, dan time to live;

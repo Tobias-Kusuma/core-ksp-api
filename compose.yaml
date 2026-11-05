@@ -20,15 +20,29 @@ services:
 
     environment:
       INSTANCE_NAME: api-1
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
 
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
+    command: redis-server --appendonly yes
 
     ports:
       - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
 
   # minio:
   #   image: minio/minio
@@ -48,3 +62,6 @@ services:
   # mc:
   #   image: minio/mc
   #   entrypoint: /bin/sh
+
+volumes:
+  redis_data:
