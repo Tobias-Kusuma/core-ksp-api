@@ -233,17 +233,25 @@ func CreateAkunMobileAnggota() gin.HandlerFunc {
 
 		// cek apakah ada nasabah terdaftar
 		type ReturnNasabah struct {
-			CNO   string `gorm:"column:cno"`
-			CNM   string `gorm:"column:cnm"`
-			EMAIL string `gorm:"column:email"`
-			NOHP  string `gorm:"column:nohp"`
-			NOID  string `gorm:"column:noid"`
+			CNO   string  `gorm:"column:cno"`
+			CNM   string  `gorm:"column:cnm"`
+			EMAIL string  `gorm:"column:email"`
+			NOHP  string  `gorm:"column:nohp"`
+			NOID  string  `gorm:"column:noid"`
+			PIN   *string `gorm:"column:pin"`
 		}
 		var ReturnNas ReturnNasabah
-		if err := AppTx.Main.Table("MSTCST").Select("cno, dbo.fn_NormalisasiNama(cnm) as cnm, email, nohp, noid").Where("cno = ?", Cno).Where("email = ?", Email).
+		if err := AppTx.Main.Table("MSTCST").Select("cno, dbo.fn_NormalisasiNama(cnm) as cnm, email, nohp, noid, pin").Where("cno = ?", Cno).Where("email = ?", Email).
 			Where("dbo.fn_NormalisasiNama(cnm) = ?", Nama).Where("nohp = ?", NoTelp).Where("noid = ?", Nik).Take(&ReturnNas).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
+		if ReturnNas.PIN != nil {
+			err := fmt.Errorf("Nasabah sudah memiliki akun mobile")
+			log.Printf("ERROR: %s", err.Error())
+			helper.RespondMaskedError(c, true, err)
 			return
 		}
 
