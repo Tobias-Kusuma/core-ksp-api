@@ -171,6 +171,7 @@ type ReqTagihanPinjaman struct {
 }
 
 type ReqSimulasiPinjaman struct {
+	KD_PRODUK   string  `json:"kd_produk"`
 	PLF_DEBITUR float64 `json:"plf_debitur"`
 	JK_WKTAWAL  int64   `json:"jk_wktawal"`
 	BUNGA       float64 `json:"bunga"`

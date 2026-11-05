@@ -546,11 +546,6 @@ func GetDaftarRekening() gin.HandlerFunc {
 		Kdcab := strings.TrimSpace(ReqBody.KDCAB)
 		Cno := strings.TrimSpace(ReqBody.CNO)
 
-		if Kdcab == "" || Cno == "" {
-			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter kdcab dan cno wajib diisi"))
-			return
-		}
-
 		// ambil data nasabah dari token
 		DataCust, err := helper.GetDetailCust(c)
 		if err != nil {
@@ -559,24 +554,176 @@ func GetDaftarRekening() gin.HandlerFunc {
 			return
 		}
 
-		if DataCust.CNO != Cno || DataCust.KDCAB != Kdcab {
+		if Cno == "" {
+			Cno = DataCust.CNO
+		}
+		if Kdcab == "" {
+			Kdcab = DataCust.KDCAB
+		}
+
+		if DataCust.CNO != Cno || (Kdcab != "" && DataCust.KDCAB != Kdcab) {
 			err := fmt.Errorf("Identitas tidak dapat dipastikan")
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, true, err)
 			return
 		}
 
-		var daftarRekening []obj.SHDBLC
-		if err := AppTx.Main.Debug().Table("SHDBLC").
-			Where("kdcab = ? and cno = ?", Kdcab, Cno).
-			Order("noac asc").
-			Find(&daftarRekening).Error; err != nil {
+		// ambil status keanggotaan dari MSTCST
+		var memberStatus string
+		if err := AppTx.Main.Debug().Table("MSTCST").
+			Select("isnull(rtrim(status), '1')").
+			Where("cno = ?", Cno).
+			Scan(&memberStatus).Error; err != nil {
+			log.Printf("WARNING: Gagal mengambil status anggota MSTCST: %s", err.Error())
+			memberStatus = "1"
+		}
+
+		isAktif := strings.TrimSpace(memberStatus) == "1"
+		statusAnggota := "Tidak Aktif"
+		statusAnggotaKet := "Status Anggota Tidak Aktif"
+		if isAktif {
+			statusAnggota = "Aktif"
+			statusAnggotaKet = "Status Anggota Aktif"
+		}
+
+		query := AppTx.Main.Debug().Table("SHDBLC").
+			Select(`
+				SHDBLC.kdcab,
+				SHDBLC.noac,
+				SHDBLC.cno,
+				SHDBLC.aliasnm,
+				SHDBLC.jenis,
+				isnull(rtrim(RET500.nmproduk), '') as nmproduk,
+				case rtrim(RET500.jnsprd)
+					when '1' then 'Tabungan'
+					when '3' then 'RAB'
+					else isnull(rtrim(RET500.jnsprd), '')
+				end as jnsprd,
+				isnull(rtrim(RET500.jnstipe), '') as jnstipe,
+				isnull(SHDBLC.sldawal, 0) as sldawal,
+				isnull(SHDBLC.sldakhir, 0) as sldakhir,
+				isnull(SHDBLC.sldpakai, 0) as sldpakai,
+				isnull(SHDBLC.minsld, 0) as minsld,
+				isnull(SHDBLC.nlhold, 0) as nlhold,
+				isnull(rtrim(SHDBLC.status), '1') as status
+			`).
+			Joins("LEFT JOIN RET500 ON SHDBLC.jenis = RET500.jenis").
+			Where("SHDBLC.cno = ?", Cno)
+
+		if Kdcab != "" {
+			query = query.Where("SHDBLC.kdcab = ?", Kdcab)
+		}
+
+		rawItems := make([]obj.ResItemDaftarRekening, 0)
+		if err := query.Order(`
+			CASE 
+				WHEN rtrim(RET500.jnstipe) = '5' OR LOWER(RET500.nmproduk) LIKE '%wajib%' THEN 1
+				WHEN rtrim(RET500.jnstipe) = '1' OR LOWER(RET500.nmproduk) LIKE '%sukarela%' THEN 2
+				WHEN rtrim(RET500.jnstipe) = '4' OR LOWER(RET500.nmproduk) LIKE '%pokok%' THEN 3
+				ELSE 4
+			END ASC,
+			SHDBLC.noac ASC
+		`).Scan(&rawItems).Error; err != nil {
 			log.Printf("ERROR: Gagal mengambil daftar rekening: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
 			return
 		}
 
-		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar rekening", daftarRekening)
+		var totalSimpanan float64
+		daftarRekening := make([]obj.ResItemDaftarRekening, 0, len(rawItems))
+
+		for _, item := range rawItems {
+			// Status rekening
+			stRek := strings.TrimSpace(item.STATUS)
+			if stRek == "1" {
+				item.STATUS_KET = "Aktif"
+				totalSimpanan += item.SLDAKHIR
+			} else {
+				item.STATUS_KET = "Tidak Aktif"
+			}
+
+			item.SLDAKHIR_FMT = helper.FormatRupiah(item.SLDAKHIR)
+
+			nmProdLower := strings.ToLower(item.NMPRODUK)
+			jnsTipe := strings.TrimSpace(item.JNSTIPE)
+
+			switch {
+			case jnsTipe == "5" || strings.Contains(nmProdLower, "wajib"):
+				if item.NMPRODUK == "" {
+					item.NMPRODUK = "Simpanan Wajib"
+				}
+				item.DESKRIPSI = "Simpanan rutin anggota"
+				item.ICON = "wajib"
+				item.JNSTIPE_KET = "Wajib"
+				item.BISA_DITARIK = false
+				item.KET_DAPAT_DIGUNAKAN = ""
+			case jnsTipe == "1" || strings.Contains(nmProdLower, "sukarela") || strings.Contains(nmProdLower, "harian"):
+				if item.NMPRODUK == "" {
+					item.NMPRODUK = "Simpanan Sukarela"
+				}
+				item.DESKRIPSI = "Simpanan fleksibel anggota"
+				item.ICON = "sukarela"
+				item.JNSTIPE_KET = "Sukarela"
+				item.BISA_DITARIK = true
+
+				// Hitung saldo dapat digunakan jika sldpakai bernilai 0 tapi sldakhir > minsld
+				if item.SLDPAKAI <= 0 && item.SLDAKHIR > item.MINSLD {
+					avail := item.SLDAKHIR - item.MINSLD - item.NLHOLD
+					if avail < 0 {
+						avail = 0
+					}
+					item.SLDPAKAI = avail
+				}
+				item.SLDPAKAI_FMT = helper.FormatRupiah(item.SLDPAKAI)
+				item.KET_DAPAT_DIGUNAKAN = fmt.Sprintf("Dapat digunakan %s", item.SLDPAKAI_FMT)
+			case jnsTipe == "4" || strings.Contains(nmProdLower, "pokok"):
+				if item.NMPRODUK == "" {
+					item.NMPRODUK = "Simpanan Pokok"
+				}
+				item.DESKRIPSI = "Simpanan awal keanggotaan"
+				item.ICON = "pokok"
+				item.JNSTIPE_KET = "Pokok"
+				item.BISA_DITARIK = false
+				item.KET_DAPAT_DIGUNAKAN = ""
+			case jnsTipe == "3" || strings.Contains(nmProdLower, "berjangka"):
+				if item.NMPRODUK == "" {
+					item.NMPRODUK = "Simpanan Berjangka"
+				}
+				item.DESKRIPSI = "Simpanan berjangka anggota"
+				item.ICON = "berjangka"
+				item.JNSTIPE_KET = "Berjangka"
+				item.BISA_DITARIK = false
+				item.KET_DAPAT_DIGUNAKAN = ""
+			default:
+				if item.NMPRODUK == "" {
+					item.NMPRODUK = fmt.Sprintf("Simpanan %s", item.JENIS)
+				}
+				item.DESKRIPSI = "Simpanan anggota"
+				item.ICON = "simpanan"
+				item.JNSTIPE_KET = item.JNSTIPE
+				item.BISA_DITARIK = false
+				item.KET_DAPAT_DIGUNAKAN = ""
+			}
+
+			daftarRekening = append(daftarRekening, item)
+		}
+
+		jumlahRekening := len(daftarRekening)
+		ketJumlah := fmt.Sprintf("Saldo dari %d rekening simpanan", jumlahRekening)
+
+		res := obj.ResDaftarRekening{
+			TOTAL_SIMPANAN:      totalSimpanan,
+			TOTAL_SIMPANAN_FMT:  helper.FormatRupiah(totalSimpanan),
+			JUMLAH_REKENING:     jumlahRekening,
+			KET_JUMLAH_REKENING: ketJumlah,
+			STATUS_ANGGOTA:      statusAnggota,
+			STATUS_ANGGOTA_KET:  statusAnggotaKet,
+			IS_ANGGOTA_AKTIF:    isAktif,
+			DAFTAR_REKENING:     daftarRekening,
+			RINCIAN_SIMPANAN:    daftarRekening,
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar rekening", res)
 	}
 }
 
