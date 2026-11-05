@@ -4,17 +4,22 @@ Implementasi aktif ada di `cache/redis.go`. Cache memakai Redis bersama, bukan m
 
 ## Koneksi
 
-Client dibuat dengan konfigurasi tetap:
+Client dibuat dengan konfigurasi dinamis berbasis environment variables:
 
 ```go
-redis.Options{
-    Addr:     "redis:6379",
-    Password: "",
-    DB:       0,
-}
+Addr:     fmt.Sprintf("%s:%s", host, port), // default "redis:6379" atau baca REDIS_ADDR / REDIS_HOST & REDIS_PORT
+Password: password,                          // default "" atau baca REDIS_PASSWORD
+DB:       dbNum,                             // default 0 atau baca REDIS_DB
 ```
 
-Alamat ini cocok dengan service `redis` di Compose. Untuk menjalankan API langsung di host, pastikan hostname tersebut dapat di-resolve atau sesuaikan konfigurasi client. Client belum membaca environment Redis dan belum melakukan ping startup secara eksplisit.
+Variabel yang didukung di `.env`:
+* `REDIS_HOST`: Nama host atau IP server Redis (default: `"redis"`).
+* `REDIS_PORT`: Port server Redis (default: `"6379"`).
+* `REDIS_ADDR`: Alamat lengkap `host:port` (opsional, jika diset akan mengabaikan host & port terpisah).
+* `REDIS_PASSWORD`: Password autentikasi Redis (default: kosong).
+* `REDIS_DB`: Indeks database Redis (default: `0`).
+
+Saat startup, `main.go` menjalankan `cache.InitRedisClient()` dan melakukan uji koneksi eksplisit via `cache.PingRedis(3 * time.Second)`.
 
 Semua helper memakai `cache.Ctx_bg`, yaitu `context.Background()`. Pembatalan request HTTP tidak otomatis membatalkan operasi Redis. Timeout jaringan mengikuti konfigurasi/default library Redis; tidak ada timeout context per pemanggilan pada wrapper saat ini.
 
@@ -33,6 +38,8 @@ Contoh tersebut membutuhkan import package `cache` dan `time`.
 | `RedisSet[T](key, value, ttl)` | Marshal JSON lalu SET Redis dengan TTL; mengembalikan error marshal/Redis |
 | `RedisGet[T](key)` | Mengembalikan nilai, found, error; tipe `T` harus sesuai JSON tersimpan |
 | `RedisDel(key)` | Menghapus key dan mengembalikan error Redis |
+| `PingRedis(timeout)` | Memeriksa konektivitas ke Redis dengan batas waktu timeout |
+| `CloseRedis()` | Menutup koneksi client Redis |
 
 Untuk key yang tidak ditemukan/expired, GET mengembalikan zero value, `false`, `nil`. Error koneksi atau JSON yang tidak cocok mengembalikan zero value, `false`, dan error. String juga disimpan melalui JSON, bukan sebagai raw string.
 
@@ -40,10 +47,11 @@ Jika menyimpan struct, gunakan field exported dan JSON tag sesuai kebutuhan. Tan
 
 ## Pemakaian yang tersedia
 
-`auth.RequestIdAuth()` menggunakan key `request-id:<X-Request-Id>` dengan TTL 5 menit. Middleware ini tersedia tetapi belum dipasang pada route aktif. Pemeriksaan GET lalu SET belum atomik, dan kegagalan Redis belum membuat middleware menolak request. Detail ada di [autentikasi](internal-auth-response-helper.md).
+* **Session Login Anggota** (`controller/anggota.go`): Menyimpan key session anggota saat login dengan TTL 21 menit (`keySessionId`). Logout menghapus key melalui `RedisDel`.
+* **Idempotency Request** (`auth.RequestIdAuth()`): Menggunakan key `request-id:<X-Request-Id>` dengan TTL 5 menit untuk mencegah replaying request.
 
-Belum ada helper cache lama `Set/Get/Delete`, in-memory cache, atau manager refresh token eksternal. Untuk fitur baru, gunakan API Redis yang memang tersedia atau tambahkan implementasi beserta dokumentasinya.
+## Lifecycle & Persistensi
 
-## Lifecycle
-
-Redis di Compose belum memakai volume persisten. Restart proses API saja tidak menghapus cache Redis, tetapi data tidak dijamin bertahan saat container Redis dihapus/dibuat ulang. TTL dikelola Redis. Beberapa instance API dapat membaca key yang sama jika menunjuk ke server/database Redis yang sama.
+* **Volume Persisten**: Service Redis di `compose.yaml` menggunakan volume `redis_data:/data` dan mengaktifkan Append-Only File (`redis-server --appendonly yes`). Data sesi dan cache bertahan meskipun container di-recreate/restart.
+* **Healthcheck**: Service Redis dilengkapi healthcheck berkala (`redis-cli ping`). Service `api` memiliki konfigurasi `depends_on: redis: condition: service_healthy` sehingga API hanya mulai menerima request setelah socket Redis siap.
+* Beberapa instance API (`api-1`, `api-2`) dapat berbagi satu container Redis melalui network internal Compose.

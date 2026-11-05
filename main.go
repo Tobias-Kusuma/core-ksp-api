@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Tobias-Kusuma/core-ksp-api/auth"
+	"github.com/Tobias-Kusuma/core-ksp-api/cache"
 	db "github.com/Tobias-Kusuma/core-ksp-api/database"
 	"github.com/Tobias-Kusuma/core-ksp-api/helper"
 	"github.com/Tobias-Kusuma/core-ksp-api/routes"
@@ -25,6 +26,14 @@ func main() {
 	// load konfigurasi dari file .env jika ada
 	if err := godotenv.Load(); err != nil {
 		log.Println("Notice: File .env tidak ditemukan, menggunakan environment variables sistem")
+	}
+
+	// inisiasi redis client dan cek koneksi
+	cache.InitRedisClient()
+	if err := cache.PingRedis(3 * time.Second); err != nil {
+		log.Printf("⚠️ WARNING: Gagal terhubung ke Redis (%s): %s", cache.Redis.Options().Addr, err)
+	} else {
+		log.Printf("✅ Terhubung ke Redis di %s", cache.Redis.Options().Addr)
 	}
 
 	// buka koneksi dengan database
@@ -96,4 +105,6 @@ func main() {
 	if err := helper.FlushHTTPLogs(ctx); err != nil {
 		log.Printf("ERROR: Antrean log HTTP belum selesai saat shutdown: %s", err)
 	}
+
+	_ = cache.CloseRedis()
 }

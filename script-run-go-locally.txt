@@ -1,4 +1,6 @@
 $env:PORT = ':8080'
+$env:REDIS_HOST = '127.0.0.1'
+$env:REDIS_PORT = '6379'
 $env:MAIN_DBSERVER = 'ganti-dengan-host-sql-engine'
 $env:MAIN_DBPORT = 'ganti-dengan-port-sql-engine'
 $env:MAIN_DBUSER = 'ganti-dengan-user-sql-engine'

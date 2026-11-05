@@ -1,8 +1,10 @@
-# Menjalankan aplikasi
+# Menjalankan Aplikasi
 
-## Konfigurasi environment
+Aplikasi membaca file `.env` di working directory saat startup. Jika file tidak ada, proses tetap berjalan menggunakan environment variables sistem. File `.env` tidak boleh di-commit ke Git.
 
-Kode membaca environment proses melalui `os.Getenv`. Pemanggilan `godotenv.Load()` masih dinonaktifkan, sehingga `go run .` tidak otomatis membaca `.env`. Docker Compose meneruskan `.env` melalui `env_file`.
+## Environment variables
+
+Kode membaca environment proses melalui `os.Getenv`. Pemanggilan `godotenv.Load()` dilakukan di `main.go`.
 
 Contoh `.env` dengan nilai dummy:
 
@@ -21,7 +23,7 @@ Kelima `MAIN_DB...` wajib terisi. Prefix koneksi aktif adalah `MAIN`. `DOC_DB...
 
 `JWTKEY` dan `SIGNSECRET` dibaca saat startup. Setter saat ini tidak menolak nilai kosong. Jangan memakai secret contoh untuk deployment.
 
-Redis masih menggunakan alamat tetap `redis:6379`, password kosong, database 0 di `cache/redis.go`; belum ada konfigurasi environment Redis. `INSTANCE_NAME` diteruskan Compose tetapi belum dibaca kode aplikasi.
+Redis mendukung konfigurasi environment (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`) dengan fallback default `redis:6379`. Uji koneksi ping dijalankan saat startup `main.go`. `INSTANCE_NAME` diteruskan Compose tetapi belum dibaca kode aplikasi.
 
 ## Docker Compose
 
@@ -40,7 +42,7 @@ Dockerfile membangun binary Linux dengan `CGO_ENABLED=0`, lalu menjalankannya di
 
 Jika mengubah port listen API di `.env`, sesuaikan sisi port container pada `compose.yaml`. Perubahan environment perlu recreate container; menjalankan ulang `docker compose up -d` menerapkan konfigurasi Compose terbaru.
 
-Redis belum menggunakan volume persisten atau healthcheck. `depends_on` mengatur urutan startup service, tetapi tidak menjamin Redis siap menerima request. Dua endpoint public yang sekarang aktif belum menggunakan Redis.
+Service Redis dilengkapi volume persisten `redis_data` (AOF) dan healthcheck (`redis-cli ping`). Service `api` dikonfigurasikan dengan `depends_on: redis: condition: service_healthy` untuk memastikan socket Redis siap sebelum API menerima request.
 
 ## SQL Server di luar container
 
