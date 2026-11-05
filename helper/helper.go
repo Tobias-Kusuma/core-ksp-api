@@ -1350,3 +1350,110 @@ func FormatStsTrn(sts string) string {
 		return sts
 	}
 }
+
+// FormatRupiah memformat angka float64 menjadi format mata uang Rupiah standar (contoh: "Rp 3.800.000")
+func FormatRupiah(amount float64) string {
+	isNeg := false
+	if amount < 0 {
+		isNeg = true
+		amount = -amount
+	}
+	intPart := int64(math.Round(amount))
+	str := strconv.FormatInt(intPart, 10)
+	n := len(str)
+	if n <= 3 {
+		if isNeg {
+			return fmt.Sprintf("-Rp %s", str)
+		}
+		return fmt.Sprintf("Rp %s", str)
+	}
+
+	var sb strings.Builder
+	remainder := n % 3
+	if remainder > 0 {
+		sb.WriteString(str[:remainder])
+		if remainder < n {
+			sb.WriteString(".")
+		}
+	}
+	for i := remainder; i < n; i += 3 {
+		sb.WriteString(str[i : i+3])
+		if i+3 < n {
+			sb.WriteString(".")
+		}
+	}
+
+	if isNeg {
+		return fmt.Sprintf("-Rp %s", sb.String())
+	}
+	return fmt.Sprintf("Rp %s", sb.String())
+}
+
+// FormatRibuan memformat angka float64 menjadi format ribuan dengan pemisah titik tanpa prefix "Rp" (contoh: "833.333")
+func FormatRibuan(amount float64) string {
+	isNeg := false
+	if amount < 0 {
+		isNeg = true
+		amount = -amount
+	}
+	intPart := int64(math.Round(amount))
+	str := strconv.FormatInt(intPart, 10)
+	n := len(str)
+	if n <= 3 {
+		if isNeg {
+			return "-" + str
+		}
+		return str
+	}
+
+	var sb strings.Builder
+	remainder := n % 3
+	if remainder > 0 {
+		sb.WriteString(str[:remainder])
+		if remainder < n {
+			sb.WriteString(".")
+		}
+	}
+	for i := remainder; i < n; i += 3 {
+		sb.WriteString(str[i : i+3])
+		if i+3 < n {
+			sb.WriteString(".")
+		}
+	}
+
+	if isNeg {
+		return "-" + sb.String()
+	}
+	return sb.String()
+}
+
+var indoMonths = [...]string{
+	"", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+	"Juli", "Agustus", "September", "Oktober", "November", "Desember",
+}
+
+var indoMonthsShort = [...]string{
+	"", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+	"Jul", "Agu", "Sep", "Okt", "Nov", "Des",
+}
+
+// FormatTanggalIndo memformat time.Time menjadi format tanggal Indonesia (contoh: "10 Mei 2027")
+func FormatTanggalIndo(t time.Time) string {
+	m := int(t.Month())
+	if m < 1 || m > 12 {
+		return t.Format(DateFormat)
+	}
+	return fmt.Sprintf("%d %s %d", t.Day(), indoMonths[m], t.Year())
+}
+
+// FormatTanggalIndoSingkat memformat time.Time menjadi format singkat tabel (contoh: "10 Des 26")
+func FormatTanggalIndoSingkat(t time.Time) string {
+	m := int(t.Month())
+	if m < 1 || m > 12 {
+		return t.Format("02 Jan 06")
+	}
+	yearShort := t.Year() % 100
+	return fmt.Sprintf("%02d %s %02d", t.Day(), indoMonthsShort[m], yearShort)
+}
+
+

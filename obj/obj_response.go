@@ -51,6 +51,43 @@ type ResDataRekening struct {
 	JNSTIPE  *string `json:"jnstipe" gorm:"column:jnstipe"`
 }
 
+type ResItemDaftarRekening struct {
+	KDCAB               string  `json:"kdcab" gorm:"column:kdcab"`
+	NOAC                string  `json:"noac" gorm:"column:noac"`
+	CNO                 string  `json:"cno" gorm:"column:cno"`
+	ALIASNM             *string `json:"aliasnm" gorm:"column:aliasnm"`
+	JENIS               string  `json:"jenis" gorm:"column:jenis"`
+	NMPRODUK            string  `json:"nmproduk" gorm:"column:nmproduk"`
+	DESKRIPSI           string  `json:"deskripsi"`
+	JNSPRD              string  `json:"jnsprd" gorm:"column:jnsprd"`
+	JNSTIPE             string  `json:"jnstipe" gorm:"column:jnstipe"`
+	JNSTIPE_KET         string  `json:"jnstipe_ket"`
+	SLDAWAL             float64 `json:"sldawal" gorm:"column:sldawal"`
+	SLDAKHIR            float64 `json:"sldakhir" gorm:"column:sldakhir"`
+	SLDAKHIR_FMT        string  `json:"sldakhir_fmt"`
+	SLDPAKAI            float64 `json:"sldpakai" gorm:"column:sldpakai"`
+	SLDPAKAI_FMT        string  `json:"sldpakai_fmt,omitempty"`
+	MINSLD              float64 `json:"minsld" gorm:"column:minsld"`
+	NLHOLD              float64 `json:"nlhold" gorm:"column:nlhold"`
+	BISA_DITARIK        bool    `json:"bisa_ditarik"`
+	KET_DAPAT_DIGUNAKAN string  `json:"ket_dapat_digunakan,omitempty"`
+	STATUS              string  `json:"status" gorm:"column:status"`
+	STATUS_KET          string  `json:"status_ket"`
+	ICON                string  `json:"icon"`
+}
+
+type ResDaftarRekening struct {
+	TOTAL_SIMPANAN      float64                 `json:"total_simpanan"`
+	TOTAL_SIMPANAN_FMT  string                  `json:"total_simpanan_fmt"`
+	JUMLAH_REKENING     int                     `json:"jumlah_rekening"`
+	KET_JUMLAH_REKENING string                  `json:"ket_jumlah_rekening"`
+	STATUS_ANGGOTA      string                  `json:"status_anggota"`
+	STATUS_ANGGOTA_KET  string                  `json:"status_anggota_ket"`
+	IS_ANGGOTA_AKTIF    bool                    `json:"is_anggota_aktif"`
+	DAFTAR_REKENING     []ResItemDaftarRekening `json:"daftar_rekening"`
+	RINCIAN_SIMPANAN    []ResItemDaftarRekening `json:"rincian_simpanan"`
+}
+
 type ResSetorSimpanan struct {
 	KDCAB      string  `json:"kdcab"`
 	NOAC       string  `json:"noac"`
@@ -109,23 +146,36 @@ type ResTutupRekening struct {
 }
 
 type ResProdukPinjaman struct {
-	KD_PRODUK   string   `json:"kd_produk" gorm:"column:kd_produk"`
-	NM_PRODUK   string   `json:"nm_produk" gorm:"column:nm_produk"`
-	FLGJMN      string   `json:"flgjmn" gorm:"column:flgjmn"`
-	JNSANG      string   `json:"jnsang" gorm:"column:jnsang"`
-	RMSBUNGA    string   `json:"rmsbunga" gorm:"column:rmsbunga"`
-	BASERATE    *float64 `json:"baserate" gorm:"column:baserate"`
-	BULAT       *float64 `json:"bulat" gorm:"column:bulat"`
-	JNSPINJAMAN string   `json:"jnspinjaman" gorm:"column:jnspinjaman"`
+	KD_PRODUK         string   `json:"kd_produk" gorm:"column:kd_produk"`
+	NM_PRODUK         string   `json:"nm_produk" gorm:"column:nm_produk"`
+	FLGJMN            string   `json:"flgjmn" gorm:"column:flgjmn"`
+	JNSANG            string   `json:"jnsang" gorm:"column:jnsang"`
+	JNSANG_KET        string   `json:"jnsang_ket"`
+	RMSBUNGA          string   `json:"rmsbunga" gorm:"column:rmsbunga"`
+	RMSBUNGA_KET      string   `json:"rmsbunga_ket"`
+	BASERATE          *float64 `json:"baserate" gorm:"column:baserate"`
+	BUNGA             float64  `json:"bunga"`
+	BUNGA_FMT         string   `json:"bunga_fmt"`
+	DESKRIPSI         string   `json:"deskripsi"`
+	TENOR_PILIHAN     []int    `json:"tenor_pilihan"`
+	TENOR_DEFAULT     int      `json:"tenor_default"`
+	TGLANGSUR_DEFAULT int      `json:"tglangsur_default"`
+	BULAT             *float64 `json:"bulat" gorm:"column:bulat"`
+	JNSPINJAMAN       string   `json:"jnspinjaman" gorm:"column:jnspinjaman"`
 }
 
 type ResJadwalAngsuran struct {
-	ANGSURKE float64 `json:"angsurke"`
-	TGLVAL   string  `json:"tglval"`
-	POKOKJDW float64 `json:"pokok_jdw"`
-	BUNGAJDW float64 `json:"bunga_jdw"`
-	TOTAL    float64 `json:"total_angsuran"`
-	OSDEBJDW float64 `json:"osdeb_jdw"`
+	ANGSURKE     float64 `json:"angsurke"`
+	TGLVAL       string  `json:"tglval"`
+	TGLVAL_FMT   string  `json:"tglval_fmt"`
+	POKOKJDW     float64 `json:"pokok_jdw"`
+	POKOKJDW_FMT string  `json:"pokok_jdw_fmt"`
+	BUNGAJDW     float64 `json:"bunga_jdw"`
+	BUNGAJDW_FMT string  `json:"bunga_jdw_fmt"`
+	TOTAL        float64 `json:"total_angsuran"`
+	TOTAL_FMT    string  `json:"total_angsuran_fmt"`
+	OSDEBJDW     float64 `json:"osdeb_jdw"`
+	OSDEBJDW_FMT string  `json:"osdeb_jdw_fmt,omitempty"`
 }
 
 type ResPinjamanBaru struct {
@@ -228,21 +278,36 @@ type ResTagihanPinjaman struct {
 }
 
 type ResSimulasiPinjaman struct {
-	PLF_DEBITUR   float64             `json:"plf_debitur"`
-	JK_WKTAWAL    int64               `json:"jk_wktawal"`
-	BUNGA         float64             `json:"bunga"`
-	RMSBUNGA      string              `json:"rmsbunga"`
-	RMSBUNGA_KET  string              `json:"rmsbunga_ket"`
-	JNSANGSUR     string              `json:"jnsangsur"`
-	JNSANGSUR_KET string              `json:"jnsangsur_ket"`
-	TGL_AWAL      string              `json:"tgl_awal"`
-	JT_TEMPO      string              `json:"jt_tempo"`
-	ANGSUR_DEB    float64             `json:"angsur_deb"`
-	ANGSPOKOK     float64             `json:"angspokok"`
-	ANGSBUNGA     float64             `json:"angsbunga"`
-	TOTBNG        float64             `json:"totbng"`
-	TOTAL_BAYAR   float64             `json:"total_bayar"`
-	JADWAL        []ResJadwalAngsuran `json:"jadwal"`
+	KD_PRODUK       string              `json:"kd_produk,omitempty"`
+	NM_PRODUK       string              `json:"nm_produk"`
+	SUB_RINGKASAN   string              `json:"sub_ringkasan"`
+	PLF_DEBITUR     float64             `json:"plf_debitur"`
+	PLF_DEBITUR_FMT string              `json:"plf_debitur_fmt"`
+	JK_WKTAWAL      int64               `json:"jk_wktawal"`
+	TENOR_KET       string              `json:"tenor_ket"`
+	BUNGA           float64             `json:"bunga"`
+	BUNGA_FMT       string              `json:"bunga_fmt"`
+	RMSBUNGA        string              `json:"rmsbunga"`
+	RMSBUNGA_KET    string              `json:"rmsbunga_ket"`
+	JNSANGSUR       string              `json:"jnsangsur"`
+	JNSANGSUR_KET   string              `json:"jnsangsur_ket"`
+	TGL_AWAL        string              `json:"tgl_awal"`
+	TGLANGSUR       int                 `json:"tglangsur"`
+	TGLANGSUR_KET   string              `json:"tglangsur_ket"`
+	JT_TEMPO        string              `json:"jt_tempo"`
+	JT_TEMPO_FMT    string              `json:"jt_tempo_fmt"`
+	ANGSUR_DEB      float64             `json:"angsur_deb"`
+	ANGSUR_DEB_FMT  string              `json:"angsur_deb_fmt"`
+	ANGSPOKOK       float64             `json:"angspokok"`
+	ANGSPOKOK_FMT   string              `json:"angspokok_fmt"`
+	ANGSBUNGA       float64             `json:"angsbunga"`
+	ANGSBUNGA_FMT   string              `json:"angsbunga_fmt"`
+	TOTBNG          float64             `json:"totbng"`
+	TOTBNG_FMT      string              `json:"totbng_fmt"`
+	TOTAL_BAYAR     float64             `json:"total_bayar"`
+	TOTAL_BAYAR_FMT string              `json:"total_bayar_fmt"`
+	CATATAN         string              `json:"catatan"`
+	JADWAL          []ResJadwalAngsuran `json:"jadwal"`
 }
 
 type ResBayarAngsuran struct {

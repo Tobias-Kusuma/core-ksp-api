@@ -40,17 +40,55 @@ func GetProdukPinjaman() gin.HandlerFunc {
 			bulat			
 		`
 
-		ResData := make([]obj.ResProdukPinjaman, 0)
+		var rawData []obj.ResProdukPinjaman
 		if err := AppTx.Main.Debug().Table("PRODUK").
 			Select(querySelect).
 			Order("kd_produk asc").
-			Scan(&ResData).Error; err != nil {
+			Scan(&rawData).Error; err != nil {
 			log.Printf("ERROR: Gagal mengambil data produk pinjaman: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
 			return
 		}
 
-		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar produk pinjaman", ResData)
+		resData := make([]obj.ResProdukPinjaman, len(rawData))
+		for i, p := range rawData {
+			rate := 0.0
+			if p.BASERATE != nil {
+				rate = *p.BASERATE
+			}
+			p.BUNGA = rate
+			p.BUNGA_FMT = fmt.Sprintf("%.0f%% / tahun", rate)
+			if rate != float64(int(rate)) {
+				p.BUNGA_FMT = fmt.Sprintf("%.2f%% / tahun", rate)
+			}
+
+			switch strings.ToUpper(strings.TrimSpace(p.RMSBUNGA)) {
+			case "2", "ANUITAS":
+				p.RMSBUNGA_KET = "Anuitas"
+			case "4", "FLAT":
+				p.RMSBUNGA_KET = "Flat"
+			case "5", "EFEKTIF":
+				p.RMSBUNGA_KET = "Efektif"
+			default:
+				p.RMSBUNGA_KET = p.RMSBUNGA
+			}
+
+			switch strings.ToUpper(strings.TrimSpace(p.JNSANG)) {
+			case "1", "BUNGA":
+				p.JNSANG_KET = "Bunga"
+			default:
+				p.JNSANG_KET = "Pokok + Bunga"
+			}
+
+			p.DESKRIPSI = fmt.Sprintf("Bunga %s • %s • %s", p.BUNGA_FMT, p.RMSBUNGA_KET, p.JNSANG_KET)
+			p.TENOR_PILIHAN = []int{1, 3, 6, 12, 24}
+			p.TENOR_DEFAULT = 6
+			p.TGLANGSUR_DEFAULT = 10
+
+			resData[i] = p
+		}
+
+		helper.RespondMaskedOk(c, "Berhasil mendapatkan daftar produk pinjaman", resData)
 	}
 }
 
@@ -451,7 +489,8 @@ func GetTagihan() gin.HandlerFunc {
 func SimulasiPinjaman() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ReqBody obj.ReqSimulasiPinjaman
-		if err := c.ShouldBindJSON(&ReqBody); err != nil {
+		AppTx, err := helper.Get_DB_ReqBody(c, 30, &ReqBody)
+		if err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, true, fmt.Errorf("Format request tidak valid: %s", err.Error()))
 			return
@@ -467,26 +506,63 @@ func SimulasiPinjaman() gin.HandlerFunc {
 			return
 		}
 
+		// Jika kd_produk dikirimkan, cari data default dari tabel PRODUK
+		nmProduk := "Pinjaman"
+		kdProduk := strings.TrimSpace(ReqBody.KD_PRODUK)
+		if kdProduk != "" && AppTx != nil && AppTx.Main != nil {
+			var produk obj.PRODUK
+			if err := AppTx.Main.Debug().Table("PRODUK").
+				Where("kd_produk = ?", kdProduk).
+				First(&produk).Error; err == nil {
+				if produk.NMPRODUK != nil && strings.TrimSpace(*produk.NMPRODUK) != "" {
+					nmProduk = strings.TrimSpace(*produk.NMPRODUK)
+				}
+				if ReqBody.BUNGA <= 0 && produk.BASERATE != nil {
+					ReqBody.BUNGA = *produk.BASERATE
+				}
+				if ReqBody.RMSBUNGA == "" && produk.RMSBUNGA != nil {
+					ReqBody.RMSBUNGA = *produk.RMSBUNGA
+				}
+				if ReqBody.JNSANGSUR == "" && produk.JNSANG != nil {
+					ReqBody.JNSANGSUR = *produk.JNSANG
+				}
+			} else {
+				log.Printf("WARNING: Produk %s tidak ditemukan di master PRODUK: %s", kdProduk, err.Error())
+			}
+		}
+
 		if ReqBody.BUNGA < 0 {
 			helper.RespondMaskedError(c, true, fmt.Errorf("Suku bunga pinjaman (bunga) tidak boleh negatif"))
 			return
 		}
 
 		RmsBunga := helper.NormalizeRmsBunga(ReqBody.RMSBUNGA)
-		RmsBungaKet := helper.RmsBungaLabel(RmsBunga)
+		rmsBungaKet := "Flat"
+		switch RmsBunga {
+		case "2":
+			rmsBungaKet = "Anuitas"
+		case "5":
+			rmsBungaKet = "Efektif"
+		}
 
 		JnsAngsur := helper.NormalizeJnsAngsur(ReqBody.JNSANGSUR)
 		JnsAngsurKet := helper.JnsAngsurLabel(JnsAngsur)
 
-		tglAwal, err := helper.ParseDateFlexible(ReqBody.TGL_AWAL)
-		if err != nil {
-			helper.RespondMaskedError(c, true, err)
-			return
+		// tgl_awal otomatis hari ini jika tidak dikirimkan
+		var tglAwal time.Time
+		if strings.TrimSpace(ReqBody.TGL_AWAL) != "" {
+			tglAwal, err = helper.ParseDateFlexible(ReqBody.TGL_AWAL)
+			if err != nil {
+				helper.RespondMaskedError(c, true, err)
+				return
+			}
+		} else {
+			tglAwal = time.Now()
 		}
 
 		tglAngsur := ReqBody.TGLANGSUR
 		if tglAngsur <= 0 || tglAngsur > 31 {
-			tglAngsur = tglAwal.Day()
+			tglAngsur = 10
 		}
 
 		tenor := int(ReqBody.JK_WKTAWAL)
@@ -505,33 +581,60 @@ func SimulasiPinjaman() gin.HandlerFunc {
 		resJadwal := make([]obj.ResJadwalAngsuran, len(schedule))
 		for i, s := range schedule {
 			resJadwal[i] = obj.ResJadwalAngsuran{
-				ANGSURKE: float64(s.AngsurKe),
-				TGLVAL:   s.TglVal.Format(helper.DateFormat),
-				POKOKJDW: s.PokokJdw,
-				BUNGAJDW: s.BungaJdw,
-				TOTAL:    s.Total,
-				OSDEBJDW: s.OsdebJdw,
+				ANGSURKE:     float64(s.AngsurKe),
+				TGLVAL:       s.TglVal.Format(helper.DateFormat),
+				TGLVAL_FMT:   helper.FormatTanggalIndoSingkat(s.TglVal),
+				POKOKJDW:     s.PokokJdw,
+				POKOKJDW_FMT: helper.FormatRibuan(s.PokokJdw),
+				BUNGAJDW:     s.BungaJdw,
+				BUNGAJDW_FMT: helper.FormatRibuan(s.BungaJdw),
+				TOTAL:        s.Total,
+				TOTAL_FMT:    helper.FormatRibuan(s.Total),
+				OSDEBJDW:     s.OsdebJdw,
+				OSDEBJDW_FMT: helper.FormatRibuan(s.OsdebJdw),
 			}
 		}
 
 		totalBayar := helper.Round2(ReqBody.PLF_DEBITUR + totBng)
 
+		bungaFmt := fmt.Sprintf("%.0f%% / tahun", ReqBody.BUNGA)
+		if ReqBody.BUNGA != float64(int(ReqBody.BUNGA)) {
+			bungaFmt = fmt.Sprintf("%.2f%% / tahun", ReqBody.BUNGA)
+		}
+
+		subRingkasan := fmt.Sprintf("%s • %s • %d bulan", nmProduk, helper.FormatRupiah(ReqBody.PLF_DEBITUR), ReqBody.JK_WKTAWAL)
+
 		res := obj.ResSimulasiPinjaman{
-			PLF_DEBITUR:   ReqBody.PLF_DEBITUR,
-			JK_WKTAWAL:    ReqBody.JK_WKTAWAL,
-			BUNGA:         ReqBody.BUNGA,
-			RMSBUNGA:      RmsBunga,
-			RMSBUNGA_KET:  RmsBungaKet,
-			JNSANGSUR:     JnsAngsur,
-			JNSANGSUR_KET: JnsAngsurKet,
-			TGL_AWAL:      tglAwal.Format(helper.DateFormat),
-			JT_TEMPO:      jtTempo.Format(helper.DateFormat),
-			ANGSUR_DEB:    angsurDeb,
-			ANGSPOKOK:     angsPokok,
-			ANGSBUNGA:     angsBunga,
-			TOTBNG:        totBng,
-			TOTAL_BAYAR:   totalBayar,
-			JADWAL:        resJadwal,
+			KD_PRODUK:       kdProduk,
+			NM_PRODUK:       nmProduk,
+			SUB_RINGKASAN:   subRingkasan,
+			PLF_DEBITUR:     ReqBody.PLF_DEBITUR,
+			PLF_DEBITUR_FMT: helper.FormatRupiah(ReqBody.PLF_DEBITUR),
+			JK_WKTAWAL:      ReqBody.JK_WKTAWAL,
+			TENOR_KET:       fmt.Sprintf("%d bulan", ReqBody.JK_WKTAWAL),
+			BUNGA:           ReqBody.BUNGA,
+			BUNGA_FMT:       bungaFmt,
+			RMSBUNGA:        RmsBunga,
+			RMSBUNGA_KET:    rmsBungaKet,
+			JNSANGSUR:       JnsAngsur,
+			JNSANGSUR_KET:   JnsAngsurKet,
+			TGL_AWAL:        tglAwal.Format(helper.DateFormat),
+			TGLANGSUR:       tglAngsur,
+			TGLANGSUR_KET:   fmt.Sprintf("Setiap tanggal %d", tglAngsur),
+			JT_TEMPO:        jtTempo.Format(helper.DateFormat),
+			JT_TEMPO_FMT:    helper.FormatTanggalIndo(jtTempo),
+			ANGSUR_DEB:      angsurDeb,
+			ANGSUR_DEB_FMT:  helper.FormatRupiah(angsurDeb),
+			ANGSPOKOK:       angsPokok,
+			ANGSPOKOK_FMT:   helper.FormatRupiah(angsPokok),
+			ANGSBUNGA:       angsBunga,
+			ANGSBUNGA_FMT:   helper.FormatRupiah(angsBunga),
+			TOTBNG:          totBng,
+			TOTBNG_FMT:      helper.FormatRupiah(totBng),
+			TOTAL_BAYAR:     totalBayar,
+			TOTAL_BAYAR_FMT: helper.FormatRupiah(totalBayar),
+			CATATAN:         "Hasil simulasi bersifat estimasi. Pengajuan pinjaman dilakukan di Kasir Koperasi.",
+			JADWAL:          resJadwal,
 		}
 
 		helper.RespondMaskedOk(c, "Berhasil membuat simulasi pinjaman", res)
