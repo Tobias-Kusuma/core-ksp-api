@@ -241,7 +241,7 @@ func CreateAkunMobileAnggota() gin.HandlerFunc {
 		}
 		var ReturnNas ReturnNasabah
 		if err := AppTx.Main.Table("MSTCST").Select("cno, dbo.fn_NormalisasiNama(cnm) as cnm, email, nohp, noid").Where("cno = ?", Cno).Where("email = ?", Email).
-			Where("dbo.fn_NormalisasiNama(cnm) as cnm = ?", Nama).Where("nphp = ?", NoTelp).Where("noid = ?", Nik).Take(&ReturnNas).Error; err != nil {
+			Where("dbo.fn_NormalisasiNama(cnm) = ?", Nama).Where("nohp = ?", NoTelp).Where("noid = ?", Nik).Take(&ReturnNas).Error; err != nil {
 			log.Printf("ERROR: %s", err.Error())
 			helper.RespondMaskedError(c, false, err)
 			return
