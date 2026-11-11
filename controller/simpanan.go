@@ -510,6 +510,37 @@ func GetMutasi() gin.HandlerFunc {
 			return
 		}
 
+		tglAwalStr := strings.TrimSpace(ReqBody.TGL_AWAL)
+		tglAkhirStr := strings.TrimSpace(ReqBody.TGL_AKHIR)
+
+		var startDate, endDate, endExclusive time.Time
+		hasStartDate := tglAwalStr != ""
+		hasEndDate := tglAkhirStr != ""
+
+		if hasStartDate {
+			parsedStart, err := helper.ParseDateFlexible(tglAwalStr)
+			if err != nil {
+				helper.RespondMaskedError(c, true, err)
+				return
+			}
+			startDate = time.Date(parsedStart.Year(), parsedStart.Month(), parsedStart.Day(), 0, 0, 0, 0, time.UTC)
+		}
+
+		if hasEndDate {
+			parsedEnd, err := helper.ParseDateFlexible(tglAkhirStr)
+			if err != nil {
+				helper.RespondMaskedError(c, true, err)
+				return
+			}
+			endDate = time.Date(parsedEnd.Year(), parsedEnd.Month(), parsedEnd.Day(), 0, 0, 0, 0, time.UTC)
+			endExclusive = endDate.AddDate(0, 0, 1)
+		}
+
+		if hasStartDate && hasEndDate && startDate.After(endDate) {
+			helper.RespondMaskedError(c, true, fmt.Errorf("Parameter tgl_awal tidak boleh lebih besar dari tgl_akhir"))
+			return
+		}
+
 		// ambil data nasabah dari token
 		DataCust, err := helper.GetDetailCust(c)
 		if err != nil {
@@ -528,7 +559,40 @@ func GetMutasi() gin.HandlerFunc {
 			return
 		}
 
+		query := AppTx.Main.Debug().Table("ViewTrnSimpanan").
+			Select(`
+				isnull(rtrim(kdcab), '') as kdcab,
+				isnull(rtrim(noref), '') as noref,
+				nou,
+				isnull(rtrim(noac), '') as noac,
+				isnull(rtrim(tcd), '') as tcd,
+				isnull(rtrim(doc), '') as doc,
+				case upper(rtrim(doc))
+					when 'D' then 'Debet'
+					when 'C' then 'Kredit'
+					else isnull(rtrim(doc), '')
+				end as tipe_mutasi,
+				isnull(nilai, 0) as nilai,
+				isnull(rtrim(ket), '') as ket,
+				tgltrn,
+				nourut
+			`).
+			Where("noac = ?", Noac)
+
+		if hasStartDate {
+			query = query.Where("tgltrn >= ?", startDate)
+		}
+		if hasEndDate {
+			query = query.Where("tgltrn < ?", endExclusive)
+		}
+
 		resMutasi := make([]obj.ResMutasiItem, 0)
+		if err := query.Order("tgltrn desc, noref desc, nourut desc, nou desc").Scan(&resMutasi).Error; err != nil {
+			log.Printf("ERROR: Gagal mengambil mutasi simpanan: %s", err.Error())
+			helper.RespondMaskedError(c, false, err)
+			return
+		}
+
 		helper.RespondMaskedOk(c, "Berhasil mendapatkan mutasi simpanan", resMutasi)
 	}
 }
