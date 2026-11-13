@@ -88,6 +88,8 @@ func main() {
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- server.ListenAndServe() }()
 
+	log.Printf("%s\n", "✅ API Apps starting ...")
+
 	// tunggu sampai server berhenti atau aplikasi menerima sinyal Ctrl+C / SIGTERM.
 	select {
 	case err := <-serverErr:
@@ -118,6 +120,4 @@ func main() {
 
 	// tutup koneksi Redis setelah proses penyelesaian log HTTP berakhir.
 	_ = cache.CloseRedis()
-
-	log.Printf("%s\n", "✅ API Apps starting ...")
 }
