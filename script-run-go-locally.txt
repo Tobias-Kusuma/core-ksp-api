@@ -1,11 +1,20 @@
 $env:PORT = ':8080'
+$env:JWTKEY = 'ganti-dengan-secret-jwt'
+$env:SIGNSECRET = 'ganti-dengan-secret-signature'
+
 $env:REDIS_HOST = '127.0.0.1'
 $env:REDIS_PORT = '6379'
+
 $env:MAIN_DBSERVER = 'ganti-dengan-host-sql-engine'
 $env:MAIN_DBPORT = 'ganti-dengan-port-sql-engine'
 $env:MAIN_DBUSER = 'ganti-dengan-user-sql-engine'
 $env:MAIN_DBPASSWORD = 'ganti-dengan-pass-sql-engine'
 $env:MAIN_DBNAME = 'ganti-dengan-nama-db'
-$env:JWTKEY = 'ganti-dengan-secret-jwt'
-$env:SIGNSECRET = 'ganti-dengan-secret-signature'
+
+$env:OTHER_DBSERVER = 'ganti-dengan-host-sql-engine'
+$env:OTHER_DBPORT = 'ganti-dengan-port-sql-engine'
+$env:OTHER_DBUSER = 'ganti-dengan-user-sql-engine'
+$env:OTHER_DBPASSWORD = 'ganti-dengan-pass-sql-engine'
+$env:OTHER_DBNAME = 'ganti-dengan-nama-db'
+
 go run .
