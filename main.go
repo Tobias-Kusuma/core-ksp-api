@@ -88,7 +88,7 @@ func main() {
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- server.ListenAndServe() }()
 
-	log.Printf("%s\n", "✅ API Apps starting ...")
+	log.Printf("%s %s\n", "✅ API Apps starting ... listening on", port)
 
 	// tunggu sampai server berhenti atau aplikasi menerima sinyal Ctrl+C / SIGTERM.
 	select {
