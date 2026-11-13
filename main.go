@@ -25,7 +25,7 @@ func main() {
 
 	// load konfigurasi dari file .env jika ada
 	if err := godotenv.Load(); err != nil {
-		log.Println("Notice: File .env tidak ditemukan, menggunakan environment variables sistem")
+		log.Println("📄 Notice: File .env tidak ditemukan, menggunakan environment variables sistem")
 	}
 
 	// inisiasi redis client dan cek koneksi
@@ -64,7 +64,6 @@ func main() {
 	routes.SimpananRoute(router)
 	routes.PinjamanRoute(router)
 
-	log.Printf("%s\n", "✅ API Apps starting ...")
 	log.Printf("%s\n", "✅ All database connections have been successfully initialized")
 
 	if port == "" {
@@ -83,28 +82,42 @@ func main() {
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// jalankan server HTTP dengan router Gin sebagai handler, jadi tidak perlu router.Run().
+	// gunakan goroutine agar proses utama tetap bisa menunggu sinyal shutdown.
+	// buffer 1 menampung hasil server meskipun proses utama sedang menangani shutdown.
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- server.ListenAndServe() }()
 
+	// tunggu sampai server berhenti atau aplikasi menerima sinyal Ctrl+C / SIGTERM.
 	select {
 	case err := <-serverErr:
+		// catat error server; ErrServerClosed menandakan server ditutup secara normal.
 		if !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("ERROR: HTTP server berhenti dengan error: %s", err)
 		}
+
 	case <-stopCtx.Done():
+		// hentikan penerimaan koneksi baru dan tunggu request aktif selesai, maksimal 20 detik.
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		if err := server.Shutdown(ctx); err != nil {
 			log.Printf("ERROR: Gagal shutdown HTTP server: %s", err)
+
+			// paksa tutup koneksi jika graceful shutdown gagal atau melewati batas waktu.
 			_ = server.Close()
 		}
+
 		cancel()
 	}
 
+	// tunggu antrean log HTTP selesai diproses, maksimal 10 detik sebelum aplikasi keluar.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := helper.FlushHTTPLogs(ctx); err != nil {
 		log.Printf("ERROR: Antrean log HTTP belum selesai saat shutdown: %s", err)
 	}
 
+	// tutup koneksi Redis setelah proses penyelesaian log HTTP berakhir.
 	_ = cache.CloseRedis()
+
+	log.Printf("%s\n", "✅ API Apps starting ...")
 }

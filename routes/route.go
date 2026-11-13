@@ -24,7 +24,12 @@ func DefaultRoutes(routerEngine *gin.Engine) {
 	{
 		// Index route
 		defaultGroup.GET("/", func(c *gin.Context) {
-			helper.RespondMaskedOk(c, "Selamat datang di API Mobile - EasyBank", nil)
+			helper.RespondMaskedOk(c, "Berhasil terhubung! Selamat datang di API untuk Core KSP", nil)
+		})
+
+		// Cek response
+		defaultGroup.GET("/ping", func(c *gin.Context) {
+			helper.RespondMaskedOk(c, "pong", nil)
 		})
 
 		// Cek DB Health
